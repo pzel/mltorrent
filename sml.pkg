@@ -1,0 +1,8 @@
+package github.com/pzel/mltorrent
+
+require {
+  github.com/pzel/sml-prelude 0.7.0
+  github.com/diku-dk/sml-setmap 0.1.2 #8549d0d64a4b63b1e7fba3e545c5cac89c2ff447
+  github.com/pzel/assert 0.9.6 #d2a083be9cd002e06b78a9a4098a00632b635361
+  github.com/sjqtentacles/sml-parsec 0.1.0 #1aaa0d44d4860ba1d08224b021c02b159d74d92e
+}

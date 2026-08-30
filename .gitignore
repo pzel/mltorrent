@@ -1,0 +1,8 @@
+bin/*
+lib/*
+!lib/github.com/
+lib/github.com/*
+!lib/github.com/pzel/
+lib/github.com/pzel/*
+!lib/github.com/pzel/mltorrent/
+!lib/github.com/pzel/mltorrent/**

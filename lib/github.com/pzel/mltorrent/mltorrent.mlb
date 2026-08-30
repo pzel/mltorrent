@@ -1,0 +1,6 @@
+$(SML_LIB)/basis/basis.mlb
+$(SML_LIB)/basis/poly.mlb
+$(SMLPKG)/github.com/pzel/sml-prelude/prelude.mlb
+$(SMLPKG)/github.com/sjqtentacles/sml-parsec/parsec.mlb
+
+mltorrent.sml

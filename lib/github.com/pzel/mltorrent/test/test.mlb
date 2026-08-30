@@ -1,0 +1,5 @@
+$(SML_LIB)/basis/basis.mlb
+$(SMLPKG)/github.com/pzel/assert/assert.mlb
+../mltorrent.mlb
+test.sml
+call-main.sml
