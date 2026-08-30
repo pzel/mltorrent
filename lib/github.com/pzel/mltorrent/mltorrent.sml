@@ -5,8 +5,6 @@ datatype t = String of string
            | List of t list
            | Dict of (key * t) list
 
-type binary = Word8Vector.vector;
-
 local
   infix 1 >>= >>
   infix 1 <*
@@ -22,7 +20,9 @@ fun manyN n p finalizer =
               (fn res => if length (res::acc) = n
                          then return (finalizer (rev (res::acc)))
                          else runIt (res::acc))
-    in runIt []
+    in if n = 0
+       then return (finalizer [])
+       else runIt []
     end
 
 fun benString n = manyN n anyChar (String o String.implode)
@@ -31,13 +31,14 @@ fun keyString n = manyN n anyChar (Key o String.implode)
 val stringParser =
     integer >>= (fn l => (char#":" ) >> (benString l))
 
+val keyParser =
+    integer >>= (fn l => (char#":" ) >> (keyString l))
+
 val integerParser =
     between (char#"i") (char#"e") integer
             >>=
             (fn i => return (Integer i))
 
-val keyParser =
-    integer >>= (fn l => (char#":" ) >> (keyString l))
 
 fun listParser () =
     between (char#"l") (char#"e") (many1 (delay bencodeParser))
@@ -59,10 +60,20 @@ and bencodeParser () =
         <|> (listParser())
         <|> (dictParser())
 
-fun decode (input: binary) : (string, t) either =
-    case runParser (bencodeParser ()) (Byte.bytesToString input)
+fun decode (input: string) : (string, t) either =
+    case runParser (bencodeParser ()) input
      of Ok v => INR v
       | Err e => INL (PolyML.makestring e)
+
+fun openTorrent (filePath: string) : (string, t) either =
+    decode (TextIO.inputAll (TextIO.openIn filePath))
+    handle (IO.Io {cause, name,...}) => INL ("Failed to open "
+                                  ^ filePath
+                                  ^ "\nWith error: "
+                                  ^ exnMessage cause ^ " " ^ name
+                                  ^"\nCurrent working directory was: "
+                                  ^ Posix.FileSys.getcwd())
+
 
 end
 end
