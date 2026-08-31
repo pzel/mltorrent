@@ -67,6 +67,13 @@ fun decode (input: string) : (string, t) either =
 fun keys (Dict kv) = map (fn (Key s, _) => s) kv
   | keys _ = []
 
+fun atKey k (Dict kv) = search k kv
+  | atKey _ _ = NONE
+and search k [] = NONE
+  | search k ((Key j, v)::rest) = if k = j
+                                  then SOME v
+                                  else search k rest
+
 end
 end (*local*)
 

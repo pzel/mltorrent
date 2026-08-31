@@ -67,11 +67,40 @@ val torrentTests = [
  ,It "contains all the fields in the file"
      (fn ()=>
          let val op == = Assert.eq PolyML.makestring
-         in T.openTorrent "./test/example.torrent" >| Either.mapRight B.keys
+         in T.openTorrent "./test/example.torrent"
+            >| Either.mapRight B.keys
                 ==
                 INR ["announce", "announce-list", "comment",
                      "created by", "creation date", "info", "url-list"]
          end)
+
+ ,It "contains the url in 'announce'"
+     (fn ()=>
+         let val op == = Assert.eq PolyML.makestring
+             fun join (SOME (SOME x)) = (SOME x)
+               | join _ = NONE
+         in T.openTorrent "./test/example.torrent"
+            >| Either.mapRight (B.atKey "announce")
+            >| Either.asRight
+            >| join
+                ==
+                SOME (B.String "udp://fosstorrents.com:6969/announce")
+         end)
+
+ ,It "contains the info dict in 'info'"
+     (fn ()=>
+         let val op == = Assert.eq PolyML.makestring
+             fun join (SOME (SOME x)) = (SOME x)
+               | join _ = NONE
+         in T.openTorrent "./test/example.torrent"
+            >| Either.mapRight (B.atKey "info")
+            >| Either.asRight
+            >| join
+            >| Option.map B.keys
+                ==
+                SOME ["length", "name", "piece length", "pieces"]
+         end)
+
 
 
 ]

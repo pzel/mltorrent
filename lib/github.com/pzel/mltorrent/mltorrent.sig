@@ -7,6 +7,7 @@ datatype t = String of string
 
 val decode : string -> (string, t) either
 val keys : t -> string list
+val atKey : string -> t -> t option
 end
 
 signature TORRENT = sig
