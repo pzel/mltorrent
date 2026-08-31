@@ -41,6 +41,13 @@ val bencodeTests = [
      (fn _=> dec"d3:cow3:moo4:spam4:eggse"
                 == (INR \> B.Dict [(B.Key "cow", B.String "moo")
                                   ,(B.Key "spam", B.String "eggs")]))
+ ,It "can show keys of a dictionary"
+     (fn _=>
+      let val op == = Assert.eq PolyML.makestring (* rebind *)
+      in B.keys (B.Dict [(B.Key "cow", B.String "moo")
+                                  ,(B.Key "spam", B.String "eggs")])
+                    == ["cow", "spam"]
+      end)
 
 ]
 
@@ -57,7 +64,14 @@ val torrentTests = [
                   INR (B.Dict _) => succeed "parsed"
                 | x => Assert.fail (PolyML.makestring x))
 
-
+ ,It "contains all the fields in the file"
+     (fn ()=>
+         let val op == = Assert.eq PolyML.makestring
+         in T.openTorrent "./test/example.torrent" >| Either.mapRight B.keys
+                ==
+                INR ["announce", "announce-list", "comment",
+                     "created by", "creation date", "info", "url-list"]
+         end)
 
 
 ]

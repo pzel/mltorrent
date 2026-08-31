@@ -6,6 +6,7 @@ datatype t = String of string
            | Dict of (key * t) list
 
 val decode : string -> (string, t) either
+val keys : t -> string list
 end
 
 signature TORRENT = sig

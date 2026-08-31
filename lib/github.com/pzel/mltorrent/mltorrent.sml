@@ -64,6 +64,9 @@ fun decode (input: string) : (string, t) either =
      of Ok v => INR v
       | Err e => INL (PolyML.makestring e)
 
+fun keys (Dict kv) = map (fn (Key s, _) => s) kv
+  | keys _ = []
+
 end
 end (*local*)
 
