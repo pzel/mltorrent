@@ -1,6 +1,7 @@
 local
   val op == = Assert.eq PolyML.makestring
   structure B = Bencode
+  structure T = Torrent
   val dec = B.decode
 in
 val bencodeTests = [
@@ -46,12 +47,13 @@ val bencodeTests = [
 val torrentTests = [
 
   It "provides a reasonable error message when file not found"
-     (fn ()=> let val res = B.openTorrent "./test/nonexistentfile"
+     (fn ()=> let val res = T.openTorrent "./test/nonexistentfile"
                   val prefix = Either.mapLeft (fn x=> String.substring(x,0,154)) res
               in prefix == INL ("Failed to open ./test/nonexistentfile\nWith error: SysErr (\"No such file or directory\", SOME ENOENT) ./test/nonexistentfile\nCurrent working directory was: ") (* skip concrete cwd info here *)
               end)
+
  ,It "reads a real info file"
-     (fn ()=> case B.openTorrent "./test/example.torrent" of
+     (fn ()=> case T.openTorrent "./test/example.torrent" of
                   INR (B.Dict _) => succeed "parsed"
                 | x => Assert.fail (PolyML.makestring x))
 

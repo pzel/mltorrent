@@ -1,4 +1,4 @@
-structure Bencode = struct
+structure Bencode : BENCODE = struct
 datatype key = Key of string
 datatype t = String of string
            | Integer of int
@@ -39,7 +39,6 @@ val integerParser =
             >>=
             (fn i => return (Integer i))
 
-
 fun listParser () =
     between (char#"l") (char#"e") (many1 (delay bencodeParser))
             >>=
@@ -65,15 +64,18 @@ fun decode (input: string) : (string, t) either =
      of Ok v => INR v
       | Err e => INL (PolyML.makestring e)
 
-fun openTorrent (filePath: string) : (string, t) either =
-    decode (TextIO.inputAll (TextIO.openIn filePath))
+end
+end (*local*)
+
+structure Torrent : TORRENT = struct
+type bencode = Bencode.t
+
+fun openTorrent (filePath: string) : (string, Bencode.t) either =
+    Bencode.decode (TextIO.inputAll (TextIO.openIn filePath))
     handle (IO.Io {cause, name,...}) => INL ("Failed to open "
                                   ^ filePath
                                   ^ "\nWith error: "
                                   ^ exnMessage cause ^ " " ^ name
                                   ^"\nCurrent working directory was: "
                                   ^ Posix.FileSys.getcwd())
-
-
-end
 end
