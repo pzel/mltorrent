@@ -79,13 +79,57 @@ end (*local*)
 
 structure Torrent : TORRENT = struct
 type bencode = Bencode.t
+type t = { metaInfo : bencode,
+           announceHost : NetHostDB.in_addr list
+         }
+datatype protocol = UDP
+type host = {protocol: protocol,
+             hostname: string,
+             port: int}
 
-fun openTorrent (filePath: string) : (string, Bencode.t) either =
+fun parseInfo (filePath: string) : (string, bencode) either =
     Bencode.decode (TextIO.inputAll (TextIO.openIn filePath))
     handle (IO.Io {cause, name,...}) => INL ("Failed to open "
-                                  ^ filePath
-                                  ^ "\nWith error: "
-                                  ^ exnMessage cause ^ " " ^ name
-                                  ^"\nCurrent working directory was: "
-                                  ^ Posix.FileSys.getcwd())
+                                             ^ filePath
+                                             ^ "\nWith error: "
+                                             ^ exnMessage cause ^ " " ^ name
+                                             ^"\nCurrent working directory was: "
+                                             ^ Posix.FileSys.getcwd())
+
+fun parseUrl (unparsed: string) : host option =
+    if (String.isPrefix "udp://" unparsed)
+    then let val len = String.size unparsed - 6
+             val rest = String.substring(unparsed, 6, len)
+             val sep = fn c => c = #":" orelse c = #"/"
+             val fields = String.fields sep rest
+             val ints = map Int.fromString fields
+         in case (fields, ints) of
+                ((host::_), (NONE :: SOME port :: _)) => SOME {protocol=UDP,
+                                                               hostname=host,
+                                                               port=port}
+              | _ => NONE
+         end
+    else NONE
+
+fun getHostAddr (metaInfo: bencode) : (string, NetHostDB.in_addr list) either  =
+    case Bencode.atKey "announce" metaInfo
+     of (SOME (Bencode.String url)) =>
+        Option.mapPartial (NetHostDB.getByName o #hostname) (parseUrl url)
+        >| Option.map NetHostDB.addrs
+        >| Either.fromOption ("Couldn't resolve host: " ^ url)
+      | _=> INL "No 'announce' key present in .torrent";
+
+
+infix 1 >>=
+
+val op >>= = (fn (pre,post) => Either.bindRight post pre)
+val return = INR
+
+fun openTorrent (filePath: string) : (string, t) either =
+    (parseInfo filePath)
+    >>= (fn metaInfo => (getHostAddr metaInfo)
+    >>= (fn addrs => INR {metaInfo = metaInfo,
+                          announceHost = addrs }))
+
+
 end

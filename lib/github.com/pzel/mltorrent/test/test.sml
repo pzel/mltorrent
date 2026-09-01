@@ -54,21 +54,22 @@ val bencodeTests = [
 val torrentTests = [
 
   It "provides a reasonable error message when file not found"
-     (fn ()=> let val res = T.openTorrent "./test/nonexistentfile"
+     (fn ()=> let val op == = Assert.eq PolyML.makestring
+                  val res = T.openTorrent "./test/nonexistentfile"
                   val prefix = Either.mapLeft (fn x=> String.substring(x,0,154)) res
               in prefix == INL ("Failed to open ./test/nonexistentfile\nWith error: SysErr (\"No such file or directory\", SOME ENOENT) ./test/nonexistentfile\nCurrent working directory was: ") (* skip concrete cwd info here *)
               end)
 
  ,It "reads a real info file"
      (fn ()=> case T.openTorrent "./test/example.torrent" of
-                  INR (B.Dict _) => succeed "parsed"
-                | x => Assert.fail (PolyML.makestring x))
+                  INR _ => succeed "parsed"
+                | INL x => Assert.fail x)
 
  ,It "contains all the fields in the file"
      (fn ()=>
          let val op == = Assert.eq PolyML.makestring
          in T.openTorrent "./test/example.torrent"
-            >| Either.mapRight B.keys
+            >| Either.mapRight (B.keys o #metaInfo)
                 ==
                 INR ["announce", "announce-list", "comment",
                      "created by", "creation date", "info", "url-list"]
@@ -80,7 +81,7 @@ val torrentTests = [
              fun join (SOME (SOME x)) = (SOME x)
                | join _ = NONE
          in T.openTorrent "./test/example.torrent"
-            >| Either.mapRight (B.atKey "announce")
+            >| Either.mapRight (B.atKey "announce" o #metaInfo)
             >| Either.asRight
             >| join
                 ==
@@ -93,7 +94,7 @@ val torrentTests = [
              fun join (SOME (SOME x)) = (SOME x)
                | join _ = NONE
          in T.openTorrent "./test/example.torrent"
-            >| Either.mapRight (B.atKey "info")
+            >| Either.mapRight (B.atKey "info" o #metaInfo)
             >| Either.asRight
             >| join
             >| Option.map B.keys
@@ -101,6 +102,16 @@ val torrentTests = [
                 SOME ["length", "name", "piece length", "pieces"]
          end)
 
+ ,It "can get announce IPs"
+     (fn ()=>
+         let val op =/= = Assert.neq PolyML.makestring
+             fun join (SOME (SOME x)) = (SOME x)
+               | join _ = NONE
+         in T.openTorrent "./test/example.torrent"
+            >| Either.mapRight (#announceHost)
+                =/=
+                INR []
+         end)
 
 
 ]
