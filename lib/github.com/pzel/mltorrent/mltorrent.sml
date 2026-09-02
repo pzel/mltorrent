@@ -36,28 +36,26 @@ val keyParser =
 
 val integerParser =
     between (char#"i") (char#"e") integer
-            >>=
-            (fn i => return (Integer i))
+    >>= (fn i => return (Integer i))
 
 fun listParser () =
     between (char#"l") (char#"e") (many1 (delay bencodeParser))
-            >>=
-            (fn l => return (List l))
+    >>= (fn l => return (List l))
 
 and dictParser () =
     between (char#"d") (char#"e") (many1 (tupleParser()))
-            >>= (fn res => return (Dict res))
+    >>= (fn res => return (Dict res))
 
 and tupleParser () =
     keyParser
-        >>= (fn k => bencodeParser()
-        >>= (fn v => return (k,v)))
+    >>= (fn k => bencodeParser()
+    >>= (fn v => return (k,v)))
 
 and bencodeParser () =
     stringParser
-        <|> integerParser
-        <|> (listParser())
-        <|> (dictParser())
+      <|> integerParser
+      <|> (listParser())
+      <|> (dictParser())
 
 fun decode (input: string) : (string, t) either =
     case runParser (bencodeParser ()) input
@@ -69,7 +67,7 @@ fun keys (Dict kv) = map (fn (Key s, _) => s) kv
 
 fun atKey k (Dict kv) = search k kv
   | atKey _ _ = NONE
-and search k [] = NONE
+and search _ [] = NONE
   | search k ((Key j, v)::rest) = if k = j
                                   then SOME v
                                   else search k rest
@@ -80,9 +78,10 @@ end (*local*)
 structure Torrent : TORRENT = struct
 type bencode = Bencode.t
 type t = { metaInfo : bencode,
-           announceHost : NetHostDB.in_addr list
+           announceHost : NetHostDB.in_addr list,
+           peers : NetHostDB.in_addr list
          }
-datatype protocol = UDP
+datatype protocol = UDP | HTTP
 type host = {protocol: protocol,
              hostname: string,
              port: int}
@@ -97,14 +96,16 @@ fun parseInfo (filePath: string) : (string, bencode) either =
                                              ^ Posix.FileSys.getcwd())
 
 fun parseUrl (unparsed: string) : host option =
-    if (String.isPrefix "udp://" unparsed)
-    then let val len = String.size unparsed - 6
-             val rest = String.substring(unparsed, 6, len)
+    if (* (String.isPrefix "udp://" unparsed)
+       orelse *)
+       (String.isPrefix "http://" unparsed)
+    then let val len = String.size unparsed - 7
+             val rest = String.substring(unparsed, 7, len)
              val sep = fn c => c = #":" orelse c = #"/"
              val fields = String.fields sep rest
              val ints = map Int.fromString fields
          in case (fields, ints) of
-                ((host::_), (NONE :: SOME port :: _)) => SOME {protocol=UDP,
+                ((host::_), (NONE :: SOME port :: _)) => SOME {protocol=HTTP,
                                                                hostname=host,
                                                                port=port}
               | _ => NONE
@@ -119,17 +120,55 @@ fun getHostAddr (metaInfo: bencode) : (string, NetHostDB.in_addr list) either  =
         >| Either.fromOption ("Couldn't resolve host: " ^ url)
       | _=> INL "No 'announce' key present in .torrent";
 
-
-infix 1 >>=
-
-val op >>= = (fn (pre,post) => Either.bindRight post pre)
-val return = INR
-
+local
+  infix 1 >>=
+  val op >>= = (fn (pre,post) => Either.bindRight post pre)
+in
 fun openTorrent (filePath: string) : (string, t) either =
     (parseInfo filePath)
-    >>= (fn metaInfo => (getHostAddr metaInfo)
+    >>= (fn metaInfo => getHostAddr metaInfo
     >>= (fn addrs => INR {metaInfo = metaInfo,
-                          announceHost = addrs }))
+                          announceHost = addrs,
+                          peers = []}))
 
+(*
+connect request:
+
+Offset  Size            Name            Value
+0       64-bit integer  protocol_id     0x41727101980 // magic constant
+8       32-bit integer  action          0 // connect
+12      32-bit integer  transaction_id
+16
+
+*)
+
+
+fun newTxnId () =
+    LargeWord.fromLargeInt (Time.toMilliseconds(Time.now ()));
+
+fun connectMsg () : Word8ArraySlice.slice =
+    let
+      val buffer = Word8Array.array(16, 0w0);
+      val _ = PackWord32Big.update(buffer, 0, 0wx417);
+      val _ = PackWord32Big.update(buffer, 1, 0wx27101980);
+      val _ = PackWord32Big.update(buffer, 3, newTxnId());
+    in Word8ArraySlice.full buffer
+    end
+
+fun getPeers (t as {announceHost as (addr::_), ...}) = let
+  val toAddr = INetSock.toAddr (addr, 1337)
+  val fromAddr = INetSock.any 1337
+  val sock = INetSock.UDP.socket ()
+  val _ = print(PolyML.makestring (connectMsg()) ^ "\n")
+  val _ = Socket.bind(sock, fromAddr)
+  val _ = Socket.Ctl.setREUSEADDR(sock, true)
+  val _ = Socket.sendArrTo (sock, toAddr, connectMsg())
+  val (response, sock') = Socket.recvVecFrom (sock, 1024)
+  val _ = print (PolyML.makestring response)
+in
+  t
+end
+
+end
 
 end

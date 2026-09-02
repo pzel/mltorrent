@@ -13,7 +13,9 @@ end
 signature TORRENT = sig
   type bencode
   type t = { metaInfo : bencode,
-             announceHost : NetHostDB.in_addr list
+             announceHost : NetHostDB.in_addr list,
+             peers : NetHostDB.in_addr list
          }
-  val openTorrent : string -> (string, t) either;
+  val openTorrent : string -> (string, t) either
+  val getPeers : t -> t
 end
