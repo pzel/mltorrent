@@ -140,35 +140,73 @@ Offset  Size            Name            Value
 12      32-bit integer  transaction_id
 16
 
+connect response:
+
+Offset  Size            Name            Value
+0       32-bit integer  action          0 // connect
+4       32-bit integer  transaction_id
+8       64-bit integer  connection_id
+16
+
+
 *)
 
+type txnId = LargeWord.word
+type connectionId = LargeWord.word
+type buffer = Word8Array.array
+type binary = Word8VectorSlice.slice
+type udpSocket = INetSock.dgram_sock
+structure PW32 = PackWord32Big
+structure PW64 = PackWord64Big
 
-fun newTxnId () =
+datatype udpTrackerProtocol =
+         ConnectRequest of txnId
+         | ConnectResponse of (txnId * connectionId)
+         (* TODO: |  Announce ; | Scrape *)
+
+fun newTxnId () : txnId =
     LargeWord.fromLargeInt (Time.toMilliseconds(Time.now ()));
 
-fun connectMsg () : Word8ArraySlice.slice =
-    let
-      val buffer = Word8Array.array(16, 0w0);
-      val _ = PackWord32Big.update(buffer, 0, 0wx417);
-      val _ = PackWord32Big.update(buffer, 1, 0wx27101980);
-      val _ = PackWord32Big.update(buffer, 3, newTxnId());
-    in Word8ArraySlice.full buffer
+fun deserialize (payload: Word8Vector.vector) : udpTrackerProtocol option =
+    if Word8Vector.length payload = 16 andalso PW32.subVec(payload, 0) = 0w0
+    then let val txnId = PW32.subVec(payload, 1)
+             val cxnId = PW64.subVec(payload, 1)
+         in SOME (ConnectResponse (txnId, cxnId))
+         end
+    else NONE
+
+fun serialize (msg: udpTrackerProtocol) : binary =
+    let val buffer = Word8Array.array(16, 0w0)
+    in case msg
+        of ConnectRequest(id) => (
+          app (fn (offset, v) => PW32.update(buffer, offset, v))
+              [(0, 0wx417), (1, 0wx27101980), (3, id)];
+          Word8VectorSlice.full (Word8Array.vector buffer))
+         | ConnectResponse(_,_) => raise Fail "TODO"
     end
 
-fun getPeers (t as {announceHost as (addr::_), ...}) = let
-  val toAddr = INetSock.toAddr (addr, 1337)
-  val fromAddr = INetSock.any 1337
-  val sock = INetSock.UDP.socket ()
-  val _ = print(PolyML.makestring (connectMsg()) ^ "\n")
-  val _ = Socket.bind(sock, fromAddr)
-  val _ = Socket.Ctl.setREUSEADDR(sock, true)
-  val _ = Socket.sendArrTo (sock, toAddr, connectMsg())
-  val (response, sock') = Socket.recvVecFrom (sock, 1024)
-  val _ = print (PolyML.makestring response)
-in
-  t
-end
+fun sendReq (toHost) (payload: binary) : Word8Vector.vector =
+    let val sock = INetSock.UDP.socket()
+        val toAddr = INetSock.toAddr (toHost, 1337)
+        val fromAddr = INetSock.any 1337
+        val _ = Socket.bind(sock, fromAddr)
+        val _ = Socket.Ctl.setREUSEADDR(sock, true)
+        val _ = Socket.sendVecTo (sock, toAddr, payload)
+        val (response, _) = Socket.recvVecFrom (sock, 1024)
+    in response before (Socket.close sock)
+    end
+(* this isn't getPeers. TODO check: if txnId matches is the same *)
 
+fun getPeers (t as {announceHost=(addr::_), ...}) =
+    let  val txnId = newTxnId()
+         val request = ConnectRequest txnId
+         val response = sendReq addr (serialize request)
+         val _ = print (PolyML.makestring request)
+         val _ = print ("\n" ^ (PolyML.makestring (deserialize response)))
+  in
+    t
+  end
+  | getPeers _ = raise Fail "IMPOSSIBLE"
 end
 
 end
