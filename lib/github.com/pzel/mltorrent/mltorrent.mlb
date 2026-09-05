@@ -4,5 +4,6 @@ $(SMLPKG)/github.com/pzel/sml-prelude/prelude.mlb
 $(SMLPKG)/github.com/pzel/packword64/packword64.mlb
 $(SMLPKG)/github.com/sjqtentacles/sml-parsec/parsec.mlb
 config.sml
+timeout.sml
 mltorrent.sig
 mltorrent.sml

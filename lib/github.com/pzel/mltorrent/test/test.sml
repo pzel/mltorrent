@@ -96,10 +96,10 @@ val torrentTests = [
 
  ,It "can get announce IPs"
      (fn ()=>
-         let val op =/= = Assert.neq PolyML.makestring
+         let val op == = Assert.eq PolyML.makestring
          in T.openTorrent "./test/sample.torrent"
-            >| Either.mapRight #announceHost
-            =/= INR []
+            >| Either.mapRight (#hostname o #announceHost)
+            == INR "tracker.opentrackr.org"
          end)
 
 (* <<0,0,4,23,39,16,25,128,0,0,0,0,190,85,94,183>> *)

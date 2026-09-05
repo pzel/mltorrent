@@ -77,47 +77,46 @@ end (*local*)
 
 structure Torrent : TORRENT = struct
 type bencode = Bencode.t
-type t = { metaInfo : bencode,
-           announceHost : NetHostDB.in_addr list,
-           peers : NetHostDB.in_addr list
-         }
 datatype protocol = UDP | HTTP
+
 type host = {protocol: protocol,
              hostname: string,
              port: int}
 
+type t = { metaInfo : bencode,
+           announceHost : host,
+           peers : NetHostDB.in_addr list
+         }
+
 fun parseInfo (filePath: string) : (string, bencode) either =
     Bencode.decode (TextIO.inputAll (TextIO.openIn filePath))
-    handle (IO.Io {cause, name,...}) => INL ("Failed to open "
-                                             ^ filePath
-                                             ^ "\nWith error: "
-                                             ^ exnMessage cause ^ " " ^ name
-                                             ^"\nCurrent working directory was: "
-                                             ^ Posix.FileSys.getcwd())
+    handle (IO.Io {cause, name,...}) =>
+           INL ("Failed to open "
+                ^ filePath
+                ^ "\nWith error: "
+                ^ exnMessage cause ^ " " ^ name
+                ^"\nCurrent working directory was: "
+                ^ Posix.FileSys.getcwd())
 
 fun parseUrl (unparsed: string) : host option =
-    if (* (String.isPrefix "udp://" unparsed)
-       orelse *)
-       (String.isPrefix "http://" unparsed)
-    then let val len = String.size unparsed - 7
-             val rest = String.substring(unparsed, 7, len)
-             val sep = fn c => c = #":" orelse c = #"/"
-             val fields = String.fields sep rest
-             val ints = map Int.fromString fields
-         in case (fields, ints) of
+    let val prefixLen = if String.isPrefix "udp://" unparsed then 6
+                        else if String.isPrefix "http://" unparsed then 7
+                        else 0
+        val len = String.size unparsed - prefixLen
+        val rest = String.substring(unparsed, prefixLen, len)
+        val sep = fn c => c = #":" orelse c = #"/"
+        val fields = String.fields sep rest
+        val ints = map Int.fromString fields
+    in case (fields, ints) of
                 ((host::_), (NONE :: SOME port :: _)) => SOME {protocol=HTTP,
                                                                hostname=host,
                                                                port=port}
               | _ => NONE
-         end
-    else NONE
+    end
 
-fun getHostAddr (metaInfo: bencode) : (string, NetHostDB.in_addr list) either  =
+fun parseHost (metaInfo: bencode) : (string, host) either  =
     case Bencode.atKey "announce" metaInfo
-     of (SOME (Bencode.String url)) =>
-        Option.mapPartial (NetHostDB.getByName o #hostname) (parseUrl url)
-        >| Option.map NetHostDB.addrs
-        >| Either.fromOption ("Couldn't resolve host: " ^ url)
+     of (SOME (Bencode.String url)) => (parseUrl url) >| Either.fromOption("Counldn't parse "^url)
       | _=> INL "No 'announce' key present in .torrent";
 
 local
@@ -126,30 +125,10 @@ local
 in
 fun openTorrent (filePath: string) : (string, t) either =
     (parseInfo filePath)
-    >>= (fn metaInfo => getHostAddr metaInfo
-    >>= (fn addrs => INR {metaInfo = metaInfo,
-                          announceHost = addrs,
-                          peers = []}))
-
-(*
-connect request:
-
-Offset  Size            Name            Value
-0       64-bit integer  protocol_id     0x41727101980 // magic constant
-8       32-bit integer  action          0 // connect
-12      32-bit integer  transaction_id
-16
-
-connect response:
-
-Offset  Size            Name            Value
-0       32-bit integer  action          0 // connect
-4       32-bit integer  transaction_id
-8       64-bit integer  connection_id
-16
-
-
-*)
+    >>= (fn metaInfo => parseHost metaInfo
+    >>= (fn host => INR {metaInfo = metaInfo,
+                         announceHost = host,
+                         peers = []}))
 
 type txnId = LargeWord.word
 type connectionId = LargeWord.word
@@ -185,28 +164,39 @@ fun serialize (msg: udpTrackerProtocol) : binary =
          | ConnectResponse(_,_) => raise Fail "TODO"
     end
 
-fun sendReq (toHost) (payload: binary) : Word8Vector.vector =
-    let val sock = INetSock.UDP.socket()
-        val toAddr = INetSock.toAddr (toHost, 1337)
-        val fromAddr = INetSock.any 1337
-        val _ = Socket.bind(sock, fromAddr)
-        val _ = Socket.Ctl.setREUSEADDR(sock, true)
-        val _ = Socket.sendVecTo (sock, toAddr, payload)
-        val (response, _) = Socket.recvVecFrom (sock, 1024)
-    in response before (Socket.close sock)
-    end
-(* this isn't getPeers. TODO check: if txnId matches is the same *)
+fun getAddr ({hostname, port, ...}) = (* : (string, INetSock.sock_addr) option = *)
+    case NetHostDB.getByName hostname
+     of NONE => INL ("Failed to resolve " ^ hostname)
+      | SOME addr => INR (INetSock.toAddr (NetHostDB.addr addr, port))
 
-fun getPeers (t as {announceHost=(addr::_), ...}) =
+fun sendReq (host: host) (payload: binary) : (string, Word8Vector.vector) either =
+    getAddr host
+    >>= (send (INetSock.UDP.socket()) (INetSock.any (#port host))  payload)
+    >>= (recv 16)
+
+and send sock fromAddr payload toAddr =
+    (Socket.Ctl.setREUSEADDR (sock, true)
+    ;Socket.bind (sock, fromAddr)
+    ;Socket.sendVecTo (sock, toAddr, payload)
+    ;INR sock)
+    handle OS.SysErr _ => INL "Failed to send payload"
+and recv n sock =
+    withTimeout (Time.fromMilliseconds 1000)
+                (fn () => Socket.recvVecFromNB(sock, n))
+    >>= (fn (resp, _) => INR resp before Socket.close sock)
+    handle OS.SysErr _ => INL "Failed to recv on socket"
+         | Size => INL "Invalid size for recv";
+
+
+fun getPeers (t as {announceHost=host, ...}) =
     let  val txnId = newTxnId()
          val request = ConnectRequest txnId
-         val response = sendReq addr (serialize request)
-         val _ = print (PolyML.makestring request)
-         val _ = print ("\n" ^ (PolyML.makestring (deserialize response)))
+         val result = sendReq host (serialize request)
+         val _ = print (PolyML.makestring result)
+         val _ = print ("\n" ^ (PolyML.makestring ((Either.mapRight deserialize) result)))
   in
     t
   end
-  | getPeers _ = raise Fail "IMPOSSIBLE"
 end
 
 end
