@@ -179,12 +179,14 @@ and send sock fromAddr payload toAddr =
     ;Socket.bind (sock, fromAddr)
     ;Socket.sendVecTo (sock, toAddr, payload)
     ;INR sock)
-    handle OS.SysErr _ => INL "Failed to send payload"
+    handle OS.SysErr e => INL \> "Failed to send payload: "
+                                 ^ PolyML.makestring e
 and recv n sock =
     withTimeout (Time.fromMilliseconds 1000)
                 (fn () => Socket.recvVecFromNB(sock, n))
     >>= (fn (resp, _) => INR resp before Socket.close sock)
-    handle OS.SysErr _ => INL "Failed to recv on socket"
+    handle OS.SysErr e => INL \> "Failed to recv on socket: "
+                                 ^ PolyML.makestring e
          | Size => INL "Invalid size for recv";
 
 
