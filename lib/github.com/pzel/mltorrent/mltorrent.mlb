@@ -2,6 +2,8 @@ $(SML_LIB)/basis/basis.mlb
 $(SML_LIB)/basis/poly.mlb
 $(SMLPKG)/github.com/pzel/sml-prelude/prelude.mlb
 $(SMLPKG)/github.com/pzel/packword64/packword64.mlb
+$(SMLPKG)/github.com/pzel/bytestring/bytestring.mlb
+$(SMLPKG)/github.com/pzel/sml-sha1/sha1.mlb
 $(SMLPKG)/github.com/sjqtentacles/sml-parsec/parsec.mlb
 config.sml
 timeout.sml

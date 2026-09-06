@@ -4,6 +4,7 @@ datatype t = String of string
            | Integer of int
            | List of t list
            | Dict of (key * t) list
+exception UnorderedKeys of string list;
 
 local
   infix 1 >>= >>
@@ -57,6 +58,27 @@ and bencodeParser () =
       <|> (listParser())
       <|> (dictParser())
 
+local
+fun doEnc (String s) = Int.toString (String.size s) ^ ":" ^ s
+  | doEnc (Integer i) = if i < 0
+                         then "i-" ^ (Int.toString (~i)) ^ "e"
+                         else "i" ^ (Int.toString i) ^ "e"
+  | doEnc (List i) = concat (("l" :: (map doEnc i)) @ ["e"])
+  | doEnc (Dict i) = (check i; concat (("d" :: (map doEncKv i)) @ ["e"]))
+and doEncKv (Key i, value) = doEnc (String i) ^ doEnc value
+and check [] = raise UnorderedKeys []
+  | check ((Key _, _)::[]) = ()
+  | check ((Key k, _)::(Key j, nxt)::rest) =
+    if String.compare(k, j) = GREATER
+    then raise UnorderedKeys [k,j]
+    else check ((Key j, nxt)::rest)
+in
+fun encode vs =
+    INR (doEnc vs)
+    handle (UnorderedKeys keys) =>
+           INL \> concat [ "Unordered keys: " ^ String.concatWith "," keys]
+end
+
 fun decode (input: string) : (string, t) either =
     case runParser (bencodeParser ()) input
      of Ok v => INR v
@@ -79,14 +101,16 @@ structure Torrent : TORRENT = struct
 type bencode = Bencode.t
 datatype protocol = UDP | HTTP
 
-type host = {protocol: protocol,
-             hostname: string,
-             port: int}
+type host = { protocol: protocol
+            , hostname: string
+            , port: int}
 
-type t = { metaInfo : bencode,
-           announceHost : host,
-           peers : NetHostDB.in_addr list
+type t = { metaInfo : bencode
+         , announceHost : host
+         , peers : NetHostDB.in_addr list
+         , infoHash : Bytestring.string
          }
+
 
 fun parseInfo (filePath: string) : (string, bencode) either =
     Bencode.decode (TextIO.inputAll (TextIO.openIn filePath))
@@ -123,12 +147,21 @@ local
   infix 1 >>=
   val op >>= = (fn (pre,post) => Either.bindRight post pre)
 in
+
+fun getHash (metaInfo: bencode) : (string, Bytestring.string) either =
+    (Either.fromOption "No info key present" (Bencode.atKey "info" metaInfo))
+    >>= Bencode.encode
+    >>= INR o SHA1.hashString
+
+
 fun openTorrent (filePath: string) : (string, t) either =
     (parseInfo filePath)
-    >>= (fn metaInfo => parseHost metaInfo
-    >>= (fn host => INR {metaInfo = metaInfo,
-                         announceHost = host,
-                         peers = []}))
+    >>= (fn metaInfo => getHash metaInfo
+    >>= (fn hash => parseHost metaInfo
+    >>= (fn host => INR {metaInfo = metaInfo
+                         ,announceHost = host
+                         ,peers = []
+                         ,infoHash = hash})))
 
 type txnId = LargeWord.word
 type connectionId = LargeWord.word
@@ -146,13 +179,13 @@ datatype udpTrackerProtocol =
 fun newTxnId () : txnId =
     LargeWord.fromLargeInt (Time.toMilliseconds(Time.now ()));
 
-fun deserialize (payload: Word8Vector.vector) : udpTrackerProtocol option =
+fun deserialize (payload: Word8Vector.vector) : (string, udpTrackerProtocol) either  =
     if Word8Vector.length payload = 16 andalso PW32.subVec(payload, 0) = 0w0
     then let val txnId = PW32.subVec(payload, 1)
              val cxnId = PW64.subVec(payload, 1)
-         in SOME (ConnectResponse (txnId, cxnId))
+         in INR (ConnectResponse (txnId, cxnId))
          end
-    else NONE
+    else INL \> "Couldn't parse payload: " ^ Byte.bytesToString payload
 
 fun serialize (msg: udpTrackerProtocol) : binary =
     let val buffer = Word8Array.array(16, 0w0)
@@ -175,10 +208,10 @@ fun sendReq (host: host) (payload: binary) : (string, Word8Vector.vector) either
     >>= (recv 16)
 
 and send sock fromAddr payload toAddr =
-    (Socket.Ctl.setREUSEADDR (sock, true)
-    ;Socket.bind (sock, fromAddr)
-    ;Socket.sendVecTo (sock, toAddr, payload)
-    ;INR sock)
+    ( Socket.Ctl.setREUSEADDR (sock, true)
+    ; Socket.bind (sock, fromAddr)
+    ; Socket.sendVecTo (sock, toAddr, payload)
+    ; INR sock)
     handle OS.SysErr e => INL \> "Failed to send payload: "
                                  ^ PolyML.makestring e
 and recv n sock =
@@ -187,18 +220,20 @@ and recv n sock =
     >>= (fn (resp, _) => INR resp before Socket.close sock)
     handle OS.SysErr e => INL \> "Failed to recv on socket: "
                                  ^ PolyML.makestring e
-         | Size => INL "Invalid size for recv";
+         | Size => INL \> "Invalid size for recv: "
+                          ^ Int.toString n;
+
+fun getPeers (ConnectResponse (txnId, connId)) = INR "hello"
 
 
-fun getPeers (t as {announceHost=host, ...}) =
-    let  val txnId = newTxnId()
-         val request = ConnectRequest txnId
-         val result = sendReq host (serialize request)
-         val _ = print (PolyML.makestring result)
-         val _ = print ("\n" ^ (PolyML.makestring ((Either.mapRight deserialize) result)))
-  in
-    t
-  end
+
+fun connect (t as {announceHost=host, ...}) =
+    (print (PolyML.makestring t);
+     ignore (sendReq host (serialize (ConnectRequest(newTxnId())))
+             >>= deserialize
+             >>= getPeers
+             >>= (fn r => INR (print ("\n" ^ (PolyML.makestring r) ^ "\n"))));
+     t)
 end
 
 end

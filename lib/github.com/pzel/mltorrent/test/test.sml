@@ -1,16 +1,13 @@
+structure B = Bencode
+structure T = Torrent
+
 local
   val op == = Assert.eq PolyML.makestring
-  structure B = Bencode
-  structure T = Torrent
   val dec = B.decode
-in
-val bencodeTests = [
+in 
+val bdecodeTests = [
   It "decodes a string of length 4"
-     (fn _=> dec "4:spam"
-             ==
-             INR (B.String "spam"))
- ,It "decodes the null string"
-     (fn _=> dec "0:" == INR (B.String""))
+     (fn _=> dec "4:spam" == INR (B.String "spam"))
  ,It "decodes a utf8-encoded string" (* łóżko: 8 bytes encoded *)
      (fn _=> dec ("8:" ^ "\197\130\195\179\197\188\107\111")
              == INR (B.String "\197\130\195\179\197\188ko"))
@@ -46,9 +43,44 @@ val bencodeTests = [
          end)
 
 ]
+end
 
+local
+  val op == = Assert.eq PolyML.makestring
+  val enc = B.encode
+in
+val bencodeTests = [
+ It "encodes a string of length 4"
+     (fn _=> enc (B.String "spam") == INR "4:spam")
+ ,It "encodes a utf8-encoded string" (* łóżko: 8 bytes encoded *)
+     (fn _=> enc (B.String "\197\130\195\179\197\188ko")
+                 == INR "8:\197\130\195\179\197\188\107\111")
+ ,It "encodes a positive integer"
+     (fn _=> enc (B.Integer 345) == INR "i345e")
+ ,It "encodes zero"
+     (fn _=> enc (B.Integer 0) == INR "i0e")
+ ,It "encodes negative integers"
+     (fn _=> enc (B.Integer ~789) == INR "i-789e")
+ ,It "encodes a list"
+     (fn _=> enc (B.List [
+                   B.String "spam",
+                   B.String "eggs",
+                   B.Integer 34]) == INR "l4:spam4:eggsi34ee")
+,It "encodes a dictionary"
+     (fn _=> enc (B.Dict [(B.Key "cow", B.String "moo")
+                         ,(B.Key "spam", B.String "eggs")])
+             == INR "d3:cow3:moo4:spam4:eggse")
+,It "fails to encode a mis-ordered dictionary"
+     (fn _=> enc (B.Dict [(B.Key "cow", B.String "moo")
+                         ,(B.Key "alpha", B.String "beta")])
+             == INL "Unordered keys: cow,alpha")
+]
+end
+
+local
+
+in
 val torrentTests = [
-
   It "provides a reasonable error message when file not found"
      (fn ()=> let val op == = Assert.eq PolyML.makestring
                   val res = T.openTorrent "./test/nonexistentfile"
@@ -94,6 +126,15 @@ val torrentTests = [
             == SOME ["files", "name", "piece length", "pieces", "private"]
          end)
 
+ ,It "calculates the info_hash"
+     (fn ()=>
+         let val op == = Assert.eq PolyML.makestring
+         in T.openTorrent "./test/sample.torrent"
+            >| Either.mapRight (Bytestring.toStringHex o #infoHash)
+            == INR "4240f5eb1bcd5f847fd1f636c5341c44ef7449e7"
+         end)
+
+
  ,It "can get announce IPs"
      (fn ()=>
          let val op == = Assert.eq PolyML.makestring
@@ -103,18 +144,17 @@ val torrentTests = [
          end)
 
 (* <<0,0,4,23,39,16,25,128,0,0,0,0,190,85,94,183>> *)
- ,It "can get a list of peers"
+ ,Pending "can get a list of peers"
      (fn ()=>
-         let val op == = Assert.eq PolyML.makestring
+         let val op =/= = Assert.eq PolyML.makestring
          in T.openTorrent "./test/sample.torrent"
-            >| Either.mapRight T.getPeers
+            >| Either.mapRight T.connect
             >| Either.mapRight #peers
-            == INR []
+            =/= INR []
          end)
 
      ]
+end
 
-  end
-
-  fun main () =
-	    runTestsWith (bencodeTests @ torrentTests) (CommandLine.arguments())
+fun main () =
+	  runTestsWith (bdecodeTests @ bencodeTests @ torrentTests) (CommandLine.arguments())

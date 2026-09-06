@@ -14,6 +14,10 @@ all:	 test
 clean:
 	-@rm -f bin/*
 
+.PHONY: t
+t: bin/test
+	./$< --filter "$$t"
+
 .PHONY: test
 test: bin/test
 	./$<

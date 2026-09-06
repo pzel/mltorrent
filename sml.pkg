@@ -6,4 +6,5 @@ require {
   github.com/pzel/assert 0.10.0 #117554f83f5d49448922d9216ba28fe863704d9e
   github.com/sjqtentacles/sml-parsec 0.1.0 #1aaa0d44d4860ba1d08224b021c02b159d74d92e
   github.com/pzel/packword64 0.1.0 #7239326eab1c9420d01a4e02a73da35500a72450
+  github.com/pzel/sml-sha1 0.1.0 #c3ba45a1a33afebefd80d4a8b30dfe1a2794033e
 }
