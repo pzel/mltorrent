@@ -25,5 +25,5 @@ signature TORRENT = sig
            , infoHash: Bytestring.string
            }
   val openTorrent : string -> (string, t) either
-  val connect : t -> t
+  val connect : t -> (string, t) either
 end

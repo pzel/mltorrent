@@ -4,7 +4,7 @@ structure T = Torrent
 local
   val op == = Assert.eq PolyML.makestring
   val dec = B.decode
-in 
+in
 val bdecodeTests = [
   It "decodes a string of length 4"
      (fn _=> dec "4:spam" == INR (B.String "spam"))
@@ -85,7 +85,19 @@ val torrentTests = [
      (fn ()=> let val op == = Assert.eq PolyML.makestring
                   val res = T.openTorrent "./test/nonexistentfile"
                   val prefix = Either.mapLeft (fn x=> String.substring(x,0,154)) res
-              in prefix == INL ("Failed to open ./test/nonexistentfile\nWith error: SysErr (\"No such file or directory\", SOME ENOENT) ./test/nonexistentfile\nCurrent working directory was: ") (* skip concrete cwd info here *)
+              in prefix 
+                 == INL \>
+                    "Failed to open ./test/nonexistentfile\n"
+                    ^"With error: SysErr (\"No such file or directory\", SOME ENOENT) "
+                    ^"./test/nonexistentfile\nCurrent working directory was: "
+                       (* skiping concrete cwd info here *)
+              end)
+
+ ,It "provides a reasonable error message when tracker is unparseable"
+     (fn ()=> let val op == = Assert.eq PolyML.makestring
+                  val res = T.openTorrent "./test/bad.torrent"
+              in res == INL \> "Counldn't parse announce host: "
+                               ^"uudp://tracker.opentrackr.org:1337/announce"
               end)
 
  ,It "reads a real info file"
@@ -143,14 +155,13 @@ val torrentTests = [
             == INR "tracker.opentrackr.org"
          end)
 
-(* <<0,0,4,23,39,16,25,128,0,0,0,0,190,85,94,183>> *)
- ,Pending "can get a list of peers"
+ ,It "can get a list of peers"
      (fn ()=>
-         let val op =/= = Assert.eq PolyML.makestring
+         let val op == = Assert.eq PolyML.makestring
          in T.openTorrent "./test/sample.torrent"
-            >| Either.mapRight T.connect
+            >| Either.bindRight T.connect
             >| Either.mapRight #peers
-            =/= INR []
+            == INL "NEVER"
          end)
 
      ]

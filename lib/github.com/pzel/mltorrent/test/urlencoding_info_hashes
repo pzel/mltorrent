@@ -1,0 +1,23 @@
+;; -*- mode: org -*-
+
+cat test/sample.torrent.info_hash | xxd -r -p | jq -sRr @uri
+
+
+this comes back successfully
+
+#+begin_src 
+curl -v 'http://tracker.opentrackr.org:1337/announce?compact=1&downloaded=0&info_hash=%42%40%f5%eb%1b%cd%5f%84%7f%d1%f6%36%c5%34%1c%44%ef%74%49%e7&left=574823&peer_id=-CC0101-%7F0%9C%AD%81c%0Et%E2%83%CF%F9&port=6881&uploaded=' 
+
+#+end_src
+
+Emitting the bencoded response:
+#+begin_src 
+{
+   "complete": 1,
+   "downloaded": 1,
+   "incomplete": 1,
+   "interval": 3670,
+   "min interval": 1835,
+   "peers": "<hex>1F AF 86 32 1A E1 81 97 CA 90 C3 50</hex>"
+}
+#+end_src
