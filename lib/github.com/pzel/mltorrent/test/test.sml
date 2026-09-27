@@ -155,13 +155,14 @@ val torrentTests = [
             == INR "tracker.opentrackr.org"
          end)
 
- ,It "can get a list of peers"
+ ,It "can get a list of peers (sham non-deterministic data atm)"
      (fn ()=>
          let val op == = Assert.eq PolyML.makestring
          in T.openTorrent "./test/sample.torrent"
             >| Either.bindRight T.connect
             >| Either.mapRight #peers
-            == INL "NEVER"
+            >| Either.mapRight PolyML.makestring
+            == INR "[(31.175.130.2, 6881), (175.130.2.26, 57729)]"
          end)
 
      ]

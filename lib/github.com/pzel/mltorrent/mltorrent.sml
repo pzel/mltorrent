@@ -150,14 +150,14 @@ fun binToAddr (input: Bytestring.string) : (string, (NetHostDB.in_addr * int) li
   val len = Bytestring.size input
 in if len mod 6 <> 0
    then INL "BAD INPUT LENGHT"
-   else let val idxs = List.tabulate(len div (len mod 6), id)
+   else let val idxs = List.tabulate(len div 6, id)
             fun ss(idx) = (Bytesubstring.substring(input, idx, 4),
                            Bytesubstring.substring(input, idx+4, 2))
-            val in_addr = Option.mapPartial (NetHostDB.fromString o Int.toString o Word.toInt)
+            val in_addr = Option.mapPartial (NetHostDB.fromString o Int.toString o Word32.toInt)
             val ips = map ss idxs
             val ipaddrs = map (fn (ip,port) =>
                                   (in_addr (ConvertWord.bytesToWord32SB' ip),
-                                   Option.map Word.toInt (ConvertWord.bytesToWord16SB' port)))
+                                   Option.map Word32.toInt (ConvertWord.bytesToWord16SB' port)))
                               ips
             val hosts = List.mapPartial (fn (SOME ip, SOME port) => SOME (ip, port)
                                         | _ => NONE) ipaddrs

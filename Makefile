@@ -4,7 +4,7 @@ MLCOMP ?= polymlb
 SMLPKG_PATH := -mlb-path-var "SMLPKG $(shell pwd)/lib"
 
 ifeq ($(MLCOMP), polymlb)
-MLCOMP_FLAGS=-deps-first -ann "ignoreFiles call-main.sml" -verbose 4
+MLCOMP_FLAGS=-ann "ignoreFiles call-main.sml"
 POLY_PATH := -mlb-path-var "POLY \$$(SML_LIB)/basis/"
 else
 MLCOMP_FLAGS=-default-ann 'allowRecordPunExps true'
@@ -24,9 +24,12 @@ test: bin/test
 
 COMP := $(MLCOMP) $(MLCOMP_FLAGS) $(SMLPKG_PATH) $(POLY_PATH) -output
 
-bin/test: $(shell find $(LIBDIR))
+bin/test: bin $(shell find $(LIBDIR))
 	$(COMP) $@ $(LIBDIR)/test/test.mlb
 
-bin/mltorrent: $(shell find $(LIBDIR))
+bin/mltorrent: bin $(shell find $(LIBDIR))
 	$(COMP) $@ $(LIBDIR)/mltorrent.mlb
 
+
+bin:
+	mkdir $@

@@ -1,6 +1,5 @@
 $(SML_LIB)/basis/basis.mlb
 $(SMLPKG)/github.com/pzel/assert/assert.mlb
-$(SMLPKG)/github.com/pzel/convert-word/convert-word.mlb
 ../mltorrent.mlb
 test.sml
 call-main.sml
