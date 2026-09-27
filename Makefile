@@ -1,10 +1,14 @@
 
 LIBDIR := lib/github.com/pzel/mltorrent
 MLCOMP ?= polymlb
-MLB_PATH := -mlb-path-var "SMLPKG $(shell pwd)/lib"
+SMLPKG_PATH := -mlb-path-var "SMLPKG $(shell pwd)/lib"
 
 ifeq ($(MLCOMP), polymlb)
-MLCOMP_FLAGS=-ann "ignoreFiles call-main.sml"
+MLCOMP_FLAGS=-deps-first -ann "ignoreFiles call-main.sml" -verbose 4
+POLY_PATH := -mlb-path-var "POLY \$$(SML_LIB)/basis/"
+else
+MLCOMP_FLAGS=-default-ann 'allowRecordPunExps true'
+POLY_PATH := -mlb-path-var "POLY \$$(SMLPKG)/github.com/pzel/polyml-fill/"
 endif
 
 .PHONY: all
@@ -14,14 +18,15 @@ all:	 test
 clean:
 	-@rm -f bin/*
 
-.PHONY: t
-t: bin/test
-	./$< --filter "$$t"
-
 .PHONY: test
 test: bin/test
 	./$<
 
+COMP := $(MLCOMP) $(MLCOMP_FLAGS) $(SMLPKG_PATH) $(POLY_PATH) -output
+
 bin/test: $(shell find $(LIBDIR))
-	@$(MLCOMP) $(MLCOMP_FLAGS) $(MLB_PATH) -output $@ $(LIBDIR)/test/test.mlb
+	$(COMP) $@ $(LIBDIR)/test/test.mlb
+
+bin/mltorrent: $(shell find $(LIBDIR))
+	$(COMP) $@ $(LIBDIR)/mltorrent.mlb
 

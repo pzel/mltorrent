@@ -99,7 +99,7 @@ end (*local*)
 
 structure Torrent : TORRENT = struct
 type bencode = Bencode.t
-datatype protocol = UDP | HTTP
+datatype protocol = UDP | HTTP | HTTPS
 
 type host = { protocol: protocol
             , hostname: string
@@ -107,10 +107,9 @@ type host = { protocol: protocol
 
 type t = { metaInfo : bencode
          , announceHost : host
-         , peers : NetHostDB.in_addr list
+         , peers : (NetHostDB.in_addr * int) list
          , infoHash : Bytestring.string
          }
-
 
 fun parseInfo (filePath: string) : (string, bencode) either =
     Bencode.decode (TextIO.inputAll (TextIO.openIn filePath))
@@ -125,6 +124,7 @@ fun parseInfo (filePath: string) : (string, bencode) either =
 fun parseUrl (unparsed: string) : host option =
     let val prefixLen = if String.isPrefix "udp://" unparsed then 6
                         else if String.isPrefix "http://" unparsed then 7
+                        else if String.isPrefix "https://" unparsed then 8
                         else 0
         val len = String.size unparsed - prefixLen
         val rest = String.substring(unparsed, prefixLen, len)
@@ -132,7 +132,8 @@ fun parseUrl (unparsed: string) : host option =
         val fields = String.fields sep rest
         val ints = map Int.fromString fields
     in case (fields, ints) of
-                ((host::_), (NONE :: SOME port :: _)) => SOME {protocol=HTTP,
+                ((host::_), (NONE :: SOME port :: _)) => SOME {protocol=(if prefixLen = 7
+                                                                         then HTTP else HTTPS),
                                                                hostname=host,
                                                                port=port}
               | _ => NONE
@@ -142,6 +143,33 @@ fun parseHost (metaInfo: bencode) : (string, host) either  =
     case Bencode.atKey "announce" metaInfo
      of (SOME (Bencode.String url)) => (parseUrl url) >| Either.fromOption("Counldn't parse announce host: "^url)
       | _=> INL "No 'announce' key present in .torrent";
+
+
+
+fun binToAddr (input: Bytestring.string) : (string, (NetHostDB.in_addr * int) list) either = let
+  val len = Bytestring.size input
+in if len mod 6 <> 0
+   then INL "BAD INPUT LENGHT"
+   else let val idxs = List.tabulate(len div (len mod 6), id)
+            fun ss(idx) = (Bytesubstring.substring(input, idx, 4),
+                           Bytesubstring.substring(input, idx+4, 2))
+            val in_addr = Option.mapPartial (NetHostDB.fromString o Int.toString o Word.toInt)
+            val ips = map ss idxs
+            val ipaddrs = map (fn (ip,port) =>
+                                  (in_addr (ConvertWord.bytesToWord32SB' ip),
+                                   Option.map Word.toInt (ConvertWord.bytesToWord16SB' port)))
+                              ips
+            val hosts = List.mapPartial (fn (SOME ip, SOME port) => SOME (ip, port)
+                                        | _ => NONE) ipaddrs
+        in INR hosts
+        end
+
+end
+
+fun parsePeers (d: bencode) : (string, (NetHostDB.in_addr * int) list) either  =
+    case Bencode.atKey "peers" d
+     of (SOME (Bencode.String b)) => binToAddr (Bytestring.fromString b)
+      | _=> INL "No 'peers' key present";
 
 local
   infix 1 >>=
@@ -172,7 +200,6 @@ type udpSocket = INetSock.dgram_sock
 structure PW32 = PackWord32Big
 structure PW64 = PackWord64Big
 fun get32(v,offset) = Word32.fromLarge(PW32.subVec(v,offset));
-
 
 datatype udpTrackerProtocol
   = ConnectRequest of txnId
@@ -205,9 +232,7 @@ fun deserialize (payload: Word8Vector.vector) : (string, udpTrackerProtocol) eit
     then INR \> ConnectResponse (get32(payload, 1),
                                  PW64.subVec(payload, 1))
     else if Word8Vector.length payload >= 16 andalso get32(payload, 0) = 0w1
-    then (PolyML.print_depth 100
-         ; PolyML.print payload
-          ; PolyML.print (get32(payload, 1));
+    then (
           INR \> AnnounceResponse { txnId = get32(payload, 1)
                                  , interval = get32(payload, 2)
                                  , leechers = get32(payload, 3)
@@ -221,7 +246,6 @@ fun serialize (msg: udpTrackerProtocol) : binary =
         val out = Word8VectorSlice.full o Word8Vector.concat
         val w64 = ConvertWord.word64ToBytesB
         val w32 = ConvertWord.word32ToBytesB
-        val w16 = ConvertWord.word16ToBytesB
     in case msg
         of ConnectRequest(id) => (
           app (fn (offset, v) => PW32.update(buffer, offset, v))
@@ -240,7 +264,7 @@ fun serialize (msg: udpTrackerProtocol) : binary =
                ,w32 (#ipAddress ar)
                ,w32 (#key ar)
                ,w32 (#numWant ar)
-               ,w16 (#port ar)]
+               ,Word8Vector.fromList[0w0,0w0,0w0,0w0]]
          | other => raise Fail (PolyML.makestring other)
     end
 
@@ -270,53 +294,7 @@ and recv n sock =
          | Size => INL \> "Invalid size for recv: "
                           ^ Int.toString n;
 
-
-(* Announce
-
-    Choose a random transaction ID.
-    Fill the announce request structure.
-    Send the packet.
-
-IPv4 announce request:
-
-Offset  Size    Name    Value
-0       64-bit integer  connection_id
-8       32-bit integer  action          1 // announce
-12      32-bit integer  transaction_id
-16      20-byte string  info_hash
-36      20-byte string  peer_id
-56      64-bit integer  downloaded
-64      64-bit integer  left
-72      64-bit integer  uploaded
-80      32-bit integer  event           0 // 0: none; 1: completed; 2: started; 3: stopped
-84      32-bit integer  IP address      0 // default
-88      32-bit integer  key
-92      32-bit integer  num_want        -1 // default
-96      16-bit integer  port
-98
-
-    Receive the packet.
-    Check whether the packet is at least 20 bytes.
-    Check whether the transaction ID is equal to the one you chose.
-    Check whether the action is announce.
-    Do not announce again until interval seconds have passed or an event has occurred.
-
-Do note that most trackers will only honor the IP address field under limited circumstances.
-
-IPv4 announce response:
-
-Offset      Size            Name            Value
-0           32-bit integer  action          1 // announce
-4           32-bit integer  transaction_id
-8           32-bit integer  interval
-12          32-bit integer  leechers
-16          32-bit integer  seeders
-20 + 6 * n  32-bit integer  IP address
-24 + 6 * n  16-bit integer  TCP port
-20 + 6 * N
-*)
-
-fun getPeers (t: t) (ConnectResponse (txnId, connId)) =
+fun getPeersUdp (t: t) (ConnectResponse (txnId, connId)) =
     let val event = 3 (*started *)
         val req = AnnounceRequest { txnId = newTxnId ()
                                   , connectionId = connId
@@ -337,14 +315,36 @@ fun getPeers (t: t) (ConnectResponse (txnId, connId)) =
       >>= deserialize
       >>= (fn r => INR (print ("\nIIINEr" ^ (PolyML.makestring r) ^ "\n")))
     end
-  | getPeers _ other = raise Fail ("getPeers got: "^PolyML.makestring other)
+  | getPeersUdp _ other = raise Fail ("getPeers got: "^PolyML.makestring other)
+
+fun getPeers (t as {announceHost=host, infoHash=h, ...}: t) (ConnectResponse (txnId, connId)) : (string, t) either =
+    let val b = Bytestring.fromString
+        val hostUrl = #hostname host ^ ":" ^ Int.toString (#port host) ^ "/announce"
+        val u = Fetch.url hostUrl [("compact", b"1")
+                                  ,("info_hash", h)
+                                  ,("left", b (Int.toString (Word.toInt 0w574823)))
+                                  ,("peer_id", b"000000000000000simon")
+                                  ,("port", b"6881")
+                                  ,("uploaded", b"0")]
+    in
+      Fetch.get u
+      >>= Bencode.decode
+      >>= parsePeers
+      >>= (fn p => INR {t where peers=p})
+    end
 
 fun connect (t as {announceHost=host, ...}) : (string, t) either =
     sendReq host (serialize (ConnectRequest(newTxnId())))
     >>= deserialize
     >>= getPeers t
-    >>= (fn peers => INR t)
-
 end
 
 end
+
+
+fun main () = let val t = hd (CommandLine.arguments())
+(*                   val _ =   PolyML.print_depth 100*)
+              in Torrent.openTorrent t
+                 >| Either.bindRight Torrent.connect
+                 >| ignore o PolyML.print
+              end

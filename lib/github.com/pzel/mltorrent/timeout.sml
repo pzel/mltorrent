@@ -1,6 +1,7 @@
 
 fun withTimeout (timeout: Time.time) (f: ({} -> 'b option)) : (string, 'b) either = let
   val rt = Timer.startRealTimer ()
+  val op > = Time.>
   fun loop () = case f()
                  of NONE => if Timer.checkRealTimer rt > timeout
                             then INL \>
