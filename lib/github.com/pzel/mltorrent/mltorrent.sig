@@ -13,7 +13,7 @@ end
 
 signature TORRENT = sig
   type bencode
-  type protocol
+  datatype protocol = UDP | HTTP | HTTPS
   type host = { protocol: protocol
               , hostname: string
               , port: int
@@ -26,4 +26,7 @@ signature TORRENT = sig
            }
   val openTorrent : string -> (string, t) either
   val connect : t -> (string, t) either
+
+  (* IDK this is test-only *)
+  val parseUrl : string -> host option
 end

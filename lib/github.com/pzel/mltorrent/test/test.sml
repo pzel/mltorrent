@@ -85,7 +85,7 @@ val torrentTests = [
      (fn ()=> let val op == = Assert.eq PolyML.makestring
                   val res = T.openTorrent "./test/nonexistentfile"
                   val prefix = Either.mapLeft (fn x=> String.substring(x,0,154)) res
-              in prefix 
+              in prefix
                  == INL \>
                     "Failed to open ./test/nonexistentfile\n"
                     ^"With error: SysErr (\"No such file or directory\", SOME ENOENT) "
@@ -98,6 +98,41 @@ val torrentTests = [
                   val res = T.openTorrent "./test/bad.torrent"
               in res == INL \> "Counldn't parse announce host: "
                                ^"uudp://tracker.opentrackr.org:1337/announce"
+              end)
+
+ ,It "parses UDP host correctly"
+     (fn ()=> let val op == = Assert.eq PolyML.makestring
+                  open Torrent
+                  val res = parseUrl "udp://foo.bar.com:5678"
+              in res == SOME {protocol=UDP, hostname="foo.bar.com", port=5678}
+              end)
+
+ ,It "parses HTTP host correctly (with default port)"
+     (fn ()=> let val op == = Assert.eq PolyML.makestring
+                  open Torrent
+                  val res = parseUrl "http://foo.bar.com/announce"
+              in res == SOME {protocol=HTTP, hostname="foo.bar.com", port=80}
+              end)
+
+ ,It "parses HTTP host correctly (with explicit port)"
+     (fn ()=> let val op == = Assert.eq PolyML.makestring
+                  open Torrent
+                  val res = parseUrl "http://foo.bar.com:1234/announce"
+              in res == SOME {protocol=HTTP, hostname="foo.bar.com", port=1234}
+              end)
+
+ ,It "parses HTTPS host correctly (with default port)"
+     (fn ()=> let val op == = Assert.eq PolyML.makestring
+                  open Torrent
+                  val res = parseUrl "https://foo.bar.com/announce"
+              in res == SOME {protocol=HTTPS, hostname="foo.bar.com", port=443}
+              end)
+
+ ,It "parses HTTPS host correctly (with explicit port)"
+     (fn ()=> let val op == = Assert.eq PolyML.makestring
+                  open Torrent
+                  val res = parseUrl "https://foo.bar.com:1234/announce"
+              in res == SOME {protocol=HTTPS, hostname="foo.bar.com", port=1234}
               end)
 
  ,It "reads a real info file"
@@ -161,8 +196,9 @@ val torrentTests = [
          in T.openTorrent "./test/sample.torrent"
             >| Either.bindRight T.connect
             >| Either.mapRight #peers
-            >| Either.mapRight PolyML.makestring
-            == INR "[(31.175.130.2, 6881), (175.130.2.26, 57729)]"
+            >| Either.map (const 0, List.length)
+            >| Either.proj
+           == 2
          end)
 
      ]

@@ -122,28 +122,33 @@ fun parseInfo (filePath: string) : (string, bencode) either =
                 ^ Posix.FileSys.getcwd())
 
 fun parseUrl (unparsed: string) : host option =
-    let val prefixLen = if String.isPrefix "udp://" unparsed then 6
-                        else if String.isPrefix "http://" unparsed then 7
-                        else if String.isPrefix "https://" unparsed then 8
-                        else 0
+    let val (prefixLen, proto) =
+            if String.isPrefix "udp://" unparsed then (6, UDP)
+            else if String.isPrefix "http://" unparsed then (7, HTTP)
+            else if String.isPrefix "https://" unparsed then (8, HTTPS)
+            else raise Domain
         val len = String.size unparsed - prefixLen
         val rest = String.substring(unparsed, prefixLen, len)
         val sep = fn c => c = #":" orelse c = #"/"
         val fields = String.fields sep rest
         val ints = map Int.fromString fields
-    in case (fields, ints) of
-                ((host::_), (NONE :: SOME port :: _)) => SOME {protocol=(if prefixLen = 7
-                                                                         then HTTP else HTTPS),
-                                                               hostname=host,
-                                                               port=port}
-              | _ => NONE
-    end
+    in case (fields, ints)
+        of ((host::_), (NONE :: SOME port :: _)) => SOME {
+                                                     protocol=proto,
+                                                     hostname=host,
+                                                     port=port}
+         | ((host::_), _) => SOME {
+                              protocol=proto,
+                              hostname=host,
+                              port=if proto = HTTP then 80 else 443}
+
+         | _ => NONE
+    end handle Domain => NONE
 
 fun parseHost (metaInfo: bencode) : (string, host) either  =
     case Bencode.atKey "announce" metaInfo
      of (SOME (Bencode.String url)) => (parseUrl url) >| Either.fromOption("Counldn't parse announce host: "^url)
       | _=> INL "No 'announce' key present in .torrent";
-
 
 
 fun binToAddr (input: Bytestring.string) : (string, (NetHostDB.in_addr * int) list) either = let

@@ -24,18 +24,11 @@ test: bin/test
 
 COMP := $(MLCOMP) $(MLCOMP_FLAGS) $(SMLPKG_PATH) $(POLY_PATH) -output
 
-bin/test: $(shell find $(LIBDIR))
-	$(COMP) $@ $(LIBDIR)/test/test.mlb
-
-bin/mltorrent: $(shell find $(LIBDIR))
-	$(COMP) $@ $(LIBDIR)/mltorrent.mlb
-
 bin/test: bin $(shell find $(LIBDIR))
 	$(COMP) $@ $(LIBDIR)/test/test.mlb
 
 bin/mltorrent: bin $(shell find $(LIBDIR))
 	$(COMP) $@ $(LIBDIR)/mltorrent.mlb
 
-
 bin:
-	mkdir $@
+	mkdir -p $@
