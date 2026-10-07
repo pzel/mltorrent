@@ -4,7 +4,7 @@ MLCOMP ?= polymlb
 SMLPKG_PATH := -mlb-path-var "SMLPKG $(shell pwd)/lib"
 
 ifeq ($(MLCOMP), polymlb)
-MLCOMP_FLAGS=-ann "ignoreFiles call-main.sml"
+MLCOMP_FLAGS=-default-ann "ignoreFiles call-main.sml"
 POLY_PATH := -mlb-path-var "POLY \$$(SML_LIB)/basis/"
 else
 MLCOMP_FLAGS=-default-ann 'allowRecordPunExps true'
@@ -17,6 +17,7 @@ all:	 test
 .PHONY: clean
 clean:
 	-@rm -f bin/*
+	-find -name '*.mlb.o' -exec rm {} \;
 
 .PHONY: test
 test: bin/test

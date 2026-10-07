@@ -1,7 +1,7 @@
 package github.com/pzel/mltorrent
 
 require {
-  github.com/pzel/sml-prelude 0.8.0 #97a50ff0ad4e2135017d80bfa06a549b204862b8
+  github.com/pzel/sml-prelude 0.8.2 #7a34957faa969bd9acfeaa4f8324c61913326c89
   github.com/diku-dk/sml-setmap 0.1.2 #8549d0d64a4b63b1e7fba3e545c5cac89c2ff447
   github.com/sjqtentacles/sml-parsec 0.1.0 #1aaa0d44d4860ba1d08224b021c02b159d74d92e
   github.com/pzel/packword64 0.1.0 #7239326eab1c9420d01a4e02a73da35500a72450
@@ -10,4 +10,5 @@ require {
   github.com/pzel/assert 0.10.0 #117554f83f5d49448922d9216ba28fe863704d9e
   github.com/pzel/fetch 0.1.2 #71bc16f79fbf1b73cea4a5e9a8411ea964e74b45
   github.com/pzel/convert-word 0.1.3 #4acc6ea6d971ee5ee363340bd3917ab011483ab2
+  github.com/pzel/fold 0.0.2 #71b084ce6867747b5d6812821c449e1175f13b5f
 }

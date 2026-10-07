@@ -41,6 +41,28 @@ val bdecodeTests = [
                            ,(B.Key "spam", B.String "eggs")])
             == ["cow", "spam"]
          end)
+ ,It "can get nested dictionary values"
+     (fn _=>
+         let val op == = Assert.eq PolyML.makestring (* rebind *)
+             val inner = B.Dict [(B.Key "inner", B.String "i")]
+             val outer = B.Dict [(B.Key "outer", inner)]
+         in B.access ["outer", "inner"] outer == SOME (B.String "i")
+         end)
+ ,It "can get nested dictionary values (not present)"
+     (fn _=>
+         let val op == = Assert.eq PolyML.makestring (* rebind *)
+             val inner = B.Dict [(B.Key "inner", B.String "i")]
+             val outer = B.Dict [(B.Key "outer", inner)]
+         in B.access ["outer", "foo"] outer == NONE
+         end)
+ ,It "can get nested dictionary values (singleton)"
+     (fn _=>
+         let val op == = Assert.eq PolyML.makestring (* rebind *)
+             val inner = B.Dict [(B.Key "inner", B.String "i")]
+             val outer = B.Dict [(B.Key "outer", inner)]
+         in B.access ["outer"] outer == SOME inner
+         end)
+
 
 ]
 end
@@ -104,35 +126,40 @@ val torrentTests = [
      (fn ()=> let val op == = Assert.eq PolyML.makestring
                   open Torrent
                   val res = parseUrl "udp://foo.bar.com:5678"
-              in res == SOME {protocol=UDP, hostname="foo.bar.com", port=5678}
+              in res == SOME {protocol=UDP, hostname="foo.bar.com",
+                              port=5678, path=""}
               end)
 
  ,It "parses HTTP host correctly (with default port)"
      (fn ()=> let val op == = Assert.eq PolyML.makestring
                   open Torrent
                   val res = parseUrl "http://foo.bar.com/announce"
-              in res == SOME {protocol=HTTP, hostname="foo.bar.com", port=80}
+              in res == SOME {protocol=HTTP, hostname="foo.bar.com",
+                              port=80, path="announce"}
               end)
 
  ,It "parses HTTP host correctly (with explicit port)"
      (fn ()=> let val op == = Assert.eq PolyML.makestring
                   open Torrent
                   val res = parseUrl "http://foo.bar.com:1234/announce"
-              in res == SOME {protocol=HTTP, hostname="foo.bar.com", port=1234}
+              in res == SOME {protocol=HTTP, hostname="foo.bar.com",
+                              port=1234, path="announce"}
               end)
 
  ,It "parses HTTPS host correctly (with default port)"
      (fn ()=> let val op == = Assert.eq PolyML.makestring
                   open Torrent
-                  val res = parseUrl "https://foo.bar.com/announce"
-              in res == SOME {protocol=HTTPS, hostname="foo.bar.com", port=443}
+                  val res = parseUrl "https://foo.bar.com/announce.php"
+              in res == SOME {protocol=HTTPS, hostname="foo.bar.com",
+                              port=443, path="announce.php"}
               end)
 
  ,It "parses HTTPS host correctly (with explicit port)"
      (fn ()=> let val op == = Assert.eq PolyML.makestring
                   open Torrent
                   val res = parseUrl "https://foo.bar.com:1234/announce"
-              in res == SOME {protocol=HTTPS, hostname="foo.bar.com", port=1234}
+              in res == SOME {protocol=HTTPS, hostname="foo.bar.com",
+                              port=1234, path="announce"}
               end)
 
  ,It "reads a real info file"
