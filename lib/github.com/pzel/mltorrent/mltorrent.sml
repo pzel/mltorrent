@@ -216,7 +216,6 @@ fun parsePeers (d: bencode) : (string, (NetHostDB.in_addr * int) list) either  =
    of (SOME (Bencode.String b)) => binToAddr (Bytestring.fromString b)
     | _=> INL "No 'peers' key present";
 
-
 fun getHash (metaInfo: bencode) : (string, Bytestring.string) either =
   (Bencode.atKey "info" metaInfo)
   >| Either.fromOption "No 'info' key present"

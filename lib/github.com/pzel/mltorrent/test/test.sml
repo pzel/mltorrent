@@ -118,7 +118,7 @@ val torrentTests = [
  ,It "provides a reasonable error message when tracker is unparseable"
      (fn ()=> let val op == = Assert.eq PolyML.makestring
                   val res = T.openTorrent "./test/bad.torrent"
-              in res == INL \> "Counldn't parse announce host: "
+              in res == INL \> "Couldn't parse announce: "
                                ^"uudp://tracker.opentrackr.org:1337/announce"
               end)
 
