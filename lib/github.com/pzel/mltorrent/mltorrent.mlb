@@ -9,8 +9,10 @@ $(SMLPKG)/github.com/pzel/sml-sha1/sha1.mlb
 $(SMLPKG)/github.com/pzel/fold/fold.mlb
 $(SMLPKG)/github.com/sjqtentacles/sml-parsec/parsec.mlb
 
+mltorrent.sig
+
 config.sml
 timeout.sml
-mltorrent.sig
+bencode.sml
 mltorrent.sml
 call-main.sml
