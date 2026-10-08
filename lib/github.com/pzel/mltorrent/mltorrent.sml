@@ -48,16 +48,16 @@ fun parseUrl (unparsed: string) : host option =
       val ints = map Int.fromString fields
   in case (fields, ints)
       of ((host::_::path), (NONE :: SOME port :: _)) => SOME {
-                                                   protocol=proto,
-                                                   hostname=host,
-                                                   port=port,
-                                                   path=String.concat path
-                                                 }
+                                                         protocol=proto,
+                                                         hostname=host,
+                                                         port=port,
+                                                         path=String.concat path
+                                                       }
        | ((host::path), _) => SOME {
-                            protocol=proto,
-                            hostname=host,
-                            port=if proto = HTTP then 80 else 443,
-                            path=String.concat path}
+                               protocol=proto,
+                               hostname=host,
+                               port=if proto = HTTP then 80 else 443,
+                               path=String.concat path}
 
 
        | _ => NONE
@@ -72,23 +72,24 @@ fun parseHost (metaInfo: bencode) : (string, host) either  =
 
 fun binToAddr (input: Bytestring.string) : (string, (NetHostDB.in_addr * int) list) either =
   if Bytestring.size input mod 6 <> 0
-  then INL "BAD INPUT LENGHT"
-  else let open ConvertWord
-           val idxs = List.tabulate(Bytestring.size input div 6, id)
-           fun ss(idx) = (Bytesubstring.substring(input, idx, 4),
-                          Bytesubstring.substring(input, idx+4, 2))
-           val in_addr = Option.mapPartial (NetHostDB.fromString
-                                            o Int.toString
-                                            o Word32.toInt)
-           val ips = map ss idxs
-            val ipaddrs = map (fn (ip,port) =>
-                                  (in_addr (bytesToWord32SB' ip),
-                                   Option.map Word32.toInt (bytesToWord16SB' port)))
-                              ips
-            val hosts = List.mapPartial (fn (SOME ip, SOME port) => SOME (ip, port)
-                                        | _ => NONE) ipaddrs
-       in INR hosts
-       end
+  then INL "BAD INPUT LENGTH"
+  else
+    let open ConvertWord
+        val idxs = List.tabulate(Bytestring.size input div 6, id)
+        fun ss(idx) = (Bytesubstring.substring(input, idx, 4),
+                       Bytesubstring.substring(input, idx+4, 2))
+        val in_addr = Option.mapPartial (NetHostDB.fromString
+                                         o Int.toString
+                                         o Word32.toInt)
+        val ips = map ss idxs
+        val ipaddrs = map (fn (ip,port) =>
+                              (in_addr (bytesToWord32SB' ip),
+                               Option.map Word32.toInt (bytesToWord16SB' port)))
+                          ips
+        val hosts = List.mapPartial (fn (SOME ip, SOME port) => SOME (ip, port)
+                                    | _ => NONE) ipaddrs
+    in INR hosts
+    end
 
 fun parsePeers (d: bencode) : (string, (NetHostDB.in_addr * int) list) either  =
   case Bencode.atKey "peers" d
