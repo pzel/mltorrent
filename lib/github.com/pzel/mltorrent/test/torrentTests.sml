@@ -1,4 +1,5 @@
 structure T = Torrent
+open URL
 
 val torrentTests = [
   It "provides a reasonable error message when file not found"

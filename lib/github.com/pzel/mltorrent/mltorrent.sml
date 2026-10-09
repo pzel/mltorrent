@@ -1,14 +1,33 @@
-structure Torrent = struct
-type bencode = Bencode.t
-datatype protocol = UDP | HTTP | HTTPS
 
-type url = { protocol: protocol
+structure URL = struct
+datatype protocol = UDP | HTTP | HTTPS
+type t = { protocol: protocol
             , hostname: string
             , path: string
             , port: int}
 
+local
+fun protocolToString UDP = "udp://"
+  | protocolToString HTTP = "http://"
+  | protocolToString HTTPS = "https://"
+in
+
+fun toString {protocol,hostname,path,port} : string =
+  protocolToString protocol
+  ^ hostname ^ ":"
+  ^ Int.toString port
+  ^ "/" ^ path
+end
+
+end (* url *)
+
+
+
+structure Torrent = struct
+type bencode = Bencode.t
+
 type t = { metaInfo : bencode
-         , announceHost : url
+         , announceHost : URL.t
          , peers : (NetHostDB.in_addr * int) list
          , infoHash : Bytestring.string
          }
@@ -17,17 +36,6 @@ val updateT =
 fn z => let fun from m a p i = {metaInfo=m,announceHost=a,peers=p,infoHash=i}
             fun to f {metaInfo=m,announceHost=a,peers=p,infoHash=i} = f m a p i
         in FRU.makeUpdate4 (from, from, to) end z;
-
-
-fun protocolToString UDP = "udp://"
-  | protocolToString HTTP = "http://"
-  | protocolToString HTTPS = "https://"
-
-fun urlToString {protocol,hostname,path,port} : string =
-  protocolToString protocol
-  ^ hostname ^ ":"
-  ^ Int.toString port
-  ^ "/" ^ path
 
 local
   infix 1 >>=
@@ -45,11 +53,11 @@ fun parseInfo (filePath: string) : (string, bencode) either =
               ^"\nCurrent working directory was: "
               ^ Posix.FileSys.getcwd())
 
-fun parseUrl (unparsed: string) : url option =
+fun parseUrl (unparsed: string) : URL.t option =
   let val (prefixLen, proto) =
-        if String.isPrefix "udp://" unparsed then (6, UDP)
-        else if String.isPrefix "http://" unparsed then (7, HTTP)
-        else if String.isPrefix "https://" unparsed then (8, HTTPS)
+        if String.isPrefix "udp://" unparsed then (6, URL.UDP)
+        else if String.isPrefix "http://" unparsed then (7, URL.HTTP)
+        else if String.isPrefix "https://" unparsed then (8, URL.HTTPS)
         else raise Domain
       val len = String.size unparsed - prefixLen
       val rest = String.substring(unparsed, prefixLen, len)
@@ -66,14 +74,14 @@ fun parseUrl (unparsed: string) : url option =
        | ((host::path), _) => SOME {
                                protocol=proto,
                                hostname=host,
-                               port=if proto = HTTP then 80 else 443,
+                               port=if proto = URL.HTTP then 80 else 443,
                                path=String.concat path}
 
 
        | _ => NONE
   end handle Domain => NONE
 
-fun getAnnounce (metaInfo: bencode) : (string, url) either  =
+fun getAnnounce (metaInfo: bencode) : (string, URL.t) either  =
   case Bencode.atKey "announce" metaInfo
    of (SOME (Bencode.String url)) => parseUrl url
                                      >| Either.fromOption("Couldn't parse announce: "^url)
@@ -121,7 +129,7 @@ fun openTorrent (filePath: string) : (string, t) either =
                       ,peers = []
                       ,infoHash = hash})))
 
-fun getAddr ({hostname, port, ...} : url) =
+fun getAddr ({hostname, port, ...} : URL.t) =
   case NetHostDB.getByName hostname
    of NONE => INL ("Failed to resolve " ^ hostname)
     | SOME addr => INR (INetSock.toAddr (NetHostDB.addr addr, port))
@@ -132,7 +140,7 @@ fun getPeersHttp (t as {announceHost=url, infoHash=h, metaInfo=m, ...}: t): (str
   val size = case Bencode.access ["info", "length"] m
               of SOME (Bencode.Integer i) => IntInf.toString i
                | _ => "0"
-  val u = Fetch.url (urlToString url) [
+  val u = Fetch.url (URL.toString url) [
       ("compact", b"1")
      ,("info_hash", h)
      ,("left", b size)
@@ -149,7 +157,7 @@ end
 
 fun getPeers (t: t) : (string, t) either =
   case #protocol (#announceHost t)
-   of UDP => raise Fail "REMOVED"
+   of URL.UDP => raise Fail "REMOVED"
     | _ => getPeersHttp t
 
 fun connect (t: t) : (string, t) either =
