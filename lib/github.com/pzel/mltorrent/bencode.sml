@@ -94,10 +94,16 @@ fun encode vs =
          INL \> concat [ "Unordered keys: " ^ String.concatWith "," keys]
 end
 
+
 fun decode' (subject: string) (input: string) : (string, t) either =
-  case runParser (bencodeParser ()) input
-   of Ok v => INR v
-    | Err e => INL ("Error decoding " ^ subject ^ " : " ^ Parsec.errorToString e)
+  let fun trim i = String.extract(i, 0, SOME (Int.min(80,String.size i)))
+  in case runParser (bencodeParser ()) input
+     of Ok v => INR v
+      | Err e => INL ("Error decoding "
+                      ^ subject ^ ": "
+                      ^ Parsec.errorToString e
+                      ^ "\nfrom: " ^ trim input)
+  end
 
 val decode = decode' ""
 
