@@ -4,5 +4,6 @@ $(SMLPKG)/github.com/pzel/convert-word/convert-word.mlb
 ../mltorrent.mlb
 bencodeTests.sml
 torrentTests.sml
+urlTests.sml
 test.sml
 call-main.sml

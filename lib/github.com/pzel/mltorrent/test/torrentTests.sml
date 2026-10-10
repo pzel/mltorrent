@@ -1,5 +1,4 @@
 structure T = Torrent
-open URL
 
 val torrentTests = [
   It "provides a reasonable error message when file not found"
@@ -21,45 +20,6 @@ val torrentTests = [
                                ^"uudp://tracker.opentrackr.org:1337/announce"
               end)
 
- ,It "parses UDP host correctly"
-     (fn ()=> let val op == = Assert.eq PolyML.makestring
-                  open Torrent
-                  val res = parseUrl "udp://foo.bar.com:5678"
-              in res == SOME {protocol=UDP, hostname="foo.bar.com",
-                              port=5678, path=""}
-              end)
-
- ,It "parses HTTP host correctly (with default port)"
-     (fn ()=> let val op == = Assert.eq PolyML.makestring
-                  open Torrent
-                  val res = parseUrl "http://foo.bar.com/announce"
-              in res == SOME {protocol=HTTP, hostname="foo.bar.com",
-                              port=80, path="announce"}
-              end)
-
- ,It "parses HTTP host correctly (with explicit port)"
-     (fn ()=> let val op == = Assert.eq PolyML.makestring
-                  open Torrent
-                  val res = parseUrl "http://foo.bar.com:1234/announce"
-              in res == SOME {protocol=HTTP, hostname="foo.bar.com",
-                              port=1234, path="announce"}
-              end)
-
- ,It "parses HTTPS host correctly (with default port)"
-     (fn ()=> let val op == = Assert.eq PolyML.makestring
-                  open Torrent
-                  val res = parseUrl "https://foo.bar.com/announce.php"
-              in res == SOME {protocol=HTTPS, hostname="foo.bar.com",
-                              port=443, path="announce.php"}
-              end)
-
- ,It "parses HTTPS host correctly (with explicit port)"
-     (fn ()=> let val op == = Assert.eq PolyML.makestring
-                  open Torrent
-                  val res = parseUrl "https://foo.bar.com:1234/announce"
-              in res == SOME {protocol=HTTPS, hostname="foo.bar.com",
-                              port=1234, path="announce"}
-              end)
 
  ,It "reads a real info file"
      (fn ()=> case T.openTorrent "./test/sample.torrent" of
@@ -128,6 +88,7 @@ val torrentTests = [
          end)
 
      ]
+
 val _ = addTests "torrent tests" torrentTests
 
 
