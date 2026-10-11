@@ -30,10 +30,38 @@ test: bin/test
 repl:
 	polymlb-repl $(MAIN_MLB)
 
+.PHONY: start-tracker
+start-tracker: bin/mltorrent-tracker stop-tracker
+	./$< &
+
+.PHONY: stop-tracker
+stop-tracker:
+	-@ps auxww \
+	| grep '[m]ltorrent-tracker' \
+	| awk '{print $$2}' \
+	| xargs kill -9
+
 bin/test: $(shell find $(LIBDIR))
 	$(COMP) $@ $(LIBDIR)/test/test.mlb
 
 bin/mltorrent: bin $(shell find $(LIBDIR))
 	$(COMP) $@ $(MAIN_MLB)
 
+bin/mltorrent-tracker: support/opentracker/opentracker stop-tracker
+	cp -r $< $@
 
+support/local.torrent: support/scratch.png
+	cd support \
+	&& mktorrent -o local.torrent \
+		     -a http://localhost:6969/announce \
+		     scratch.png
+support/scratch.png:
+	cd support && curl -O https://pzel.name/img/scratch.png
+
+support/opentracker/opentracker.c:
+	-mkdir -p support \
+	&& cd support \
+	&& git clone https://github.com/pzel/opentracker \
+
+support/opentracker/opentracker: support/opentracker/opentracker.c
+	@(cd support/opentracker  && make opentracker)

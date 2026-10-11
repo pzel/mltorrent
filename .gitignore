@@ -1,3 +1,7 @@
+support/*
+*.log
+
+
 bin/*
 lib/*
 !lib/github.com/
