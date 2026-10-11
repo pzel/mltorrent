@@ -1,6 +1,6 @@
 structure T = Torrent
 
-val torrentTests = [
+val _ = [
   It "provides a reasonable error message when file not found"
      (fn ()=> let val op == = Assert.eq PolyML.makestring
                   val res = T.openTorrent "./test/nonexistentfile"
@@ -22,14 +22,14 @@ val torrentTests = [
 
 
  ,It "reads a real info file"
-     (fn ()=> case T.openTorrent "./test/sample.torrent" of
+     (fn ()=> case T.openTorrent "./test/local.torrent" of
                   INR _ => succeed "parsed"
                 | INL x => Assert.fail x)
 
  ,It "contains all the fields in the file"
      (fn ()=>
          let val op == = Assert.eq PolyML.makestring
-         in T.openTorrent "./test/sample.torrent"
+         in T.openTorrent "./test/local.torrent"
             >| Either.mapRight (B.keys o #metaInfo)
             == INR ["announce", "created by", "creation date", "info"]
          end)
@@ -39,11 +39,11 @@ val torrentTests = [
          let val op == = Assert.eq PolyML.makestring
              fun join (SOME (SOME x)) = (SOME x)
                | join _ = NONE
-         in T.openTorrent "./test/sample.torrent"
+         in T.openTorrent "./test/local.torrent"
             >| Either.mapRight (B.atKey "announce" o #metaInfo)
             >| Either.asRight
             >| join
-            == SOME (B.String "http://tracker.opentrackr.org:1337/announce")
+            == SOME (B.String "http://localhost:6969/announce")
          end)
 
  ,It "contains the info dict in 'info'"
@@ -51,35 +51,35 @@ val torrentTests = [
          let val op == = Assert.eq PolyML.makestring
              fun join (SOME (SOME x)) = (SOME x)
                | join _ = NONE
-         in T.openTorrent "./test/sample.torrent"
+         in T.openTorrent "./test/local.torrent"
             >| Either.mapRight (B.atKey "info" o #metaInfo)
             >| Either.asRight
             >| join
             >| Option.map B.keys
-            == SOME ["files", "name", "piece length", "pieces", "private"]
+            == SOME ["length", "name", "piece length", "pieces"]
          end)
 
  ,It "calculates the info_hash"
      (fn ()=>
          let val op == = Assert.eq PolyML.makestring
-         in T.openTorrent "./test/sample.torrent"
+         in T.openTorrent "./test/local.torrent"
             >| Either.mapRight (Bytestring.toStringHex o #infoHash)
-            == INR "4240f5eb1bcd5f847fd1f636c5341c44ef7449e7"
+            == INR "6444400e83ddbb7100010718094a4686032fc45b"
          end)
 
 
  ,It "can get announce IPs"
      (fn ()=>
          let val op == = Assert.eq PolyML.makestring
-         in T.openTorrent "./test/sample.torrent"
+         in T.openTorrent "./test/local.torrent"
             >| Either.mapRight (#hostname o #announceHost)
-            == INR "tracker.opentrackr.org"
+            == INR "localhost"
          end)
 
  ,It "can get a list of peers (sham non-deterministic data atm)"
      (fn ()=>
          let val op == = Assert.eq PolyML.makestring
-         in T.openTorrent "./test/sample.torrent"
+         in T.openTorrent "./test/local.torrent"
             >| Either.bindRight T.connect
             >| Either.mapRight #peers
             >| Either.map (const 0, List.length)
@@ -87,8 +87,7 @@ val torrentTests = [
            == 2
          end)
 
-     ]
+] >| addTests "torrent tests"
 
-val _ = addTests "torrent tests" torrentTests
 
 

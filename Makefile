@@ -34,6 +34,10 @@ repl:
 start-tracker: bin/mltorrent-tracker stop-tracker
 	./$< &
 
+.PHONY: ensure-tracker-running
+ensure-tracker-running:
+	-@nc -z localhost 6969  2>/dev/null || $(MAKE) start-tracker
+
 .PHONY: stop-tracker
 stop-tracker:
 	-@ps auxww \
@@ -41,7 +45,7 @@ stop-tracker:
 	| awk '{print $$2}' \
 	| xargs kill -9
 
-bin/test: $(shell find $(LIBDIR))
+bin/test: $(shell find $(LIBDIR)) ensure-tracker-running
 	$(COMP) $@ $(LIBDIR)/test/test.mlb
 
 bin/mltorrent: bin $(shell find $(LIBDIR))
