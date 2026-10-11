@@ -15,5 +15,6 @@ config.sml
 timeout.sml
 bencode.sml
 url.sml
+peerProtocol.sml
 torrent.sml
 

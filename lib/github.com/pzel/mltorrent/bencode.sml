@@ -35,7 +35,6 @@ val stringParser =
 val keyParser =
   integer >>= (fn l => (char#":" ) >> (keyString l))
 
-
 val intInf = let
   val sign = (char #"~" >> return ~1)
              <|> (char #"-" >> return ~1)
