@@ -26,7 +26,7 @@ val _ = [
                   INR _ => succeed "parsed"
                 | INL x => Assert.fail x)
 
- ,It "contains all the fields in the file"
+ ,It "retains contains all the fields from the file in the metaInfo field"
      (fn ()=>
          let val op == = Assert.eq PolyML.makestring
          in T.openTorrent "./test/local.torrent"
@@ -46,17 +46,20 @@ val _ = [
             == SOME (B.String "http://localhost:6969/announce")
          end)
 
- ,It "contains the info dict in 'info'"
+ ,It "parses info for single file"
      (fn ()=>
          let val op == = Assert.eq PolyML.makestring
              fun join (SOME (SOME x)) = (SOME x)
                | join _ = NONE
-         in T.openTorrent "./test/local.torrent"
-            >| Either.mapRight (B.atKey "info" o #metaInfo)
-            >| Either.asRight
-            >| join
-            >| Option.map B.keys
-            == SOME ["length", "name", "piece length", "pieces"]
+             val (INR t) = T.openTorrent "./test/local.torrent"
+             val bs = Bytestring.fromString
+             val expectedPiece = Word8Vector.fromList[0wxB4, 0wx39, 0wx43, 0wx88, 0wx42, 0wxEC, 0wxC4, 0wx95, 0wx87, 0wx52, 0wx2F, 0wx62, 0wx96, 0wx89, 0wx2F, 0wx10, 0wx46, 0wx67, 0wxA9, 0wx61]
+         in (#info t) == T.SingleFile {
+              name= bs "scratch.png"
+             ,length=100506
+             ,pieceLength=262144
+             ,pieces= Vector.fromList[expectedPiece]
+            }
          end)
 
  ,It "calculates the info_hash"

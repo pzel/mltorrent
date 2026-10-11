@@ -1,16 +1,31 @@
 structure Torrent = struct
 type bencode = Bencode.t
+type bytestring = Bytestring.string
+
+datatype info =
+         SingleFile of { name: Bytestring.string
+                    , pieceLength: int
+                    , pieces: bytestring vector
+                    , length : int
+                    }
+       | ManyFiles of { name: Bytestring.string
+                   , pieceLength: int
+                   , pieces: Bytestring.string vector
+                   , files: ({ length : int, path: bytestring list} list)
+                   }
 
 type t = { metaInfo : bencode
          , announceHost : URL.t
          , peers : (NetHostDB.in_addr * int) list
-         , infoHash : Bytestring.string
+         , info : info
+         , infoHash : bytestring
          }
 
+
 val updateT =
-fn z => let fun from m a p i = {metaInfo=m,announceHost=a,peers=p,infoHash=i}
-            fun to f {metaInfo=m,announceHost=a,peers=p,infoHash=i} = f m a p i
-        in FRU.makeUpdate4 (from, from, to) end z;
+fn z => let fun from m a p i ih = {metaInfo=m,announceHost=a,peers=p,info=i,infoHash=ih}
+            fun to f {metaInfo=m,announceHost=a,peers=p,info=i,infoHash=ih} = f m a p i ih
+        in FRU.makeUpdate5 (from, from, to) end z;
 
 local
   infix 1 >>=
@@ -18,7 +33,7 @@ local
   fun $(a,f) = f a
 in
 
-fun parseInfo (filePath: string) : (string, bencode) either =
+fun parseMetaInfoFile (filePath: string) : (string, bencode) either =
   Bencode.decode' "info file" (TextIO.inputAll (TextIO.openIn filePath))
   handle (IO.Io {cause, name,...}) =>
          INL ("Failed to open "
@@ -27,6 +42,26 @@ fun parseInfo (filePath: string) : (string, bencode) either =
               ^ exnMessage cause ^ " " ^ name
               ^"\nCurrent working directory was: "
               ^ Posix.FileSys.getcwd())
+
+fun parseInfo (dict: Bencode.t) : (string, info) either = let
+  open Bencode
+  fun k key = Either.fromOption ("parseInfo: Failed to find key: "^key) (atKey key dict)
+in
+  k "name"
+  >>= (fn n => k "length"
+  >>= (fn l => k "piece length"
+  >>= (fn pl => k "pieces"
+  >>= (fn pcs =>
+          case (n,l,pl,pcs)
+           of (String n, Integer l, Integer pl, String pcs) =>
+              INR \> SingleFile { name= Bytestring.fromString n
+                                , length=Int.fromLarge l
+                                , pieceLength=Int.fromLarge pl
+                                , pieces = Vector.fromList [Bytestring.fromString pcs]
+                                }
+            | _ => INL "Malformed info data"))))
+ end
+
 
 
 fun getAnnounce (metaInfo: bencode) : (string, URL.t) either  =
@@ -69,13 +104,18 @@ fun getHash (metaInfo: bencode) : (string, Bytestring.string) either =
   >>= INR o SHA1.hashString
 
 fun openTorrent (filePath: string) : (string, t) either =
-  (parseInfo filePath)
-  >>= (fn metaInfo => getHash metaInfo
-  >>= (fn hash => getAnnounce metaInfo
-  >>= (fn url => INR {metaInfo = metaInfo
-                      ,announceHost = url
-                      ,peers = []
-                      ,infoHash = hash})))
+  parseMetaInfoFile filePath
+  >>= (fn m=> getHash m
+  >>= (fn h=> getAnnounce m
+  >>= (fn url=> Either.fromOption "Couldn't find key: info in torrent metaInfo"
+                                  (Bencode.atKey "info" m)
+  >>= (fn infoKey=> parseInfo infoKey
+  >>= (fn i=>
+          INR {metaInfo = m
+               ,announceHost = url
+               ,peers = []
+               ,info = i
+               ,infoHash = h})))))
 
 fun getAddr ({hostname, port, ...} : URL.t) =
   case NetHostDB.getByName hostname

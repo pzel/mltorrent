@@ -42,11 +42,8 @@ val intInf = let
              <|> return 1
   val digits = many1 digit
 in
-  sign >>= (
-  fn sgn =>
-     digits >>= (
-       fn ds =>
-          return (sgn * (valOf (IntInf.fromString (implode ds))))))
+  sign >>= (fn sgn => digits
+       >>= (fn ds => return (sgn * (valOf (IntInf.fromString (implode ds))))))
 end
 
 val integerParser =
@@ -64,7 +61,7 @@ and dictParser () =
 and tupleParser () =
   keyParser
   >>= (fn k => bencodeParser()
-               >>= (fn v => return (k,v)))
+  >>= (fn v => return (k,v)))
 
 and bencodeParser () =
   (try (dictParser()))
@@ -98,11 +95,11 @@ end
 fun decode' (subject: string) (input: string) : (string, t) either =
   let fun trim i = String.extract(i, 0, SOME (Int.min(80,String.size i)))
   in case runParser (bencodeParser ()) input
-     of Ok v => INR v
-      | Err e => INL ("Error decoding "
-                      ^ subject ^ ": "
-                      ^ Parsec.errorToString e
-                      ^ "\nfrom: " ^ trim input)
+      of Ok v => INR v
+       | Err e => INL ("Error decoding "
+                       ^ subject ^ ": "
+                       ^ Parsec.errorToString e
+                       ^ "\nfrom: " ^ trim input)
   end
 
 val decode = decode' ""
