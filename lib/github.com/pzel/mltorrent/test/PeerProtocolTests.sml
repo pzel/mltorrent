@@ -1,6 +1,7 @@
 local
 
 val b = Bytestring.fromString
+val bin = Bytestring.fromWord8Vector o Word8Vector.fromList
 open PeerProtocol
 
 
@@ -25,14 +26,19 @@ val tt = [
                 0wx39, 0wx30, 0wx30, 0wx30, 0wx30, 0wx30, 0wx30, 0wx30, 0wx30,
                 0wx30, 0wx30, 0wx30, 0wx30, 0wx30, 0wx30, 0wx30, 0wx73, 0wx69, 0wx6D, 0wx6F, 0wx6E]
            end)
- ,It "can create a keepalive" (
+ ,It "can create a keepalive message" (
     fn()=> let val op== = Assert.eq PolyML.makestring
-           in keepalive () == Word8Vector.fromList[0w0,0w0,0w0,0w0]
+           in keepalive == bin[0w0,0w0,0w0,0w0]
            end)
+ ,It "can create choke/unchoke/interested/notInterested messages" (
+    fn()=>( (choke =??= bin[0w0,0w0,0w0,0w1,0w0]) "choke"
+          ; (unchoke =??= bin[0w0,0w0,0w0,0w1,0w1]) "unchoke"
+          ; (interested =??= bin[0w0,0w0,0w0,0w1,0w2]) "interested"
+          ; (notInterested =??= bin[0w0,0w0,0w0,0w1,0w3]) "notInterested"
+          ; Assert.succeed "Messages 0-4 trivially valid"))
+
 ]
 
 in
-
 val _ = addTests "peer protocol tests" tt
-
 end

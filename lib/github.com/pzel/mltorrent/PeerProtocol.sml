@@ -15,12 +15,20 @@ fun handshake (infoHash: bytestring) (peerId: bytestring) : bytestring =
   , peerId
   ]
 
-fun keepalive () : bytestring =
-  bin[0w0,0w0,0w0,0w0]
+val keepalive : bytestring = bin[0w0,0w0,0w0,0w0]
+
+val choke : bytestring = bin[0w0,0w0,0w0,0w1,0w0]
+val unchoke : bytestring = bin[0w0,0w0,0w0,0w1,0w1]
+val interested : bytestring = bin[0w0,0w0,0w0,0w1,0w2]
+val notInterested : bytestring = bin[0w0,0w0,0w0,0w1,0w3]
 
 
 end : sig
         type t = Word8Vector.vector
         val handshake : (Bytestring.string) -> (Bytestring.string) -> Bytestring.string
-        val keepalive : unit -> Bytestring.string
+        val keepalive :  Bytestring.string
+        val choke : Bytestring.string
+        val unchoke : Bytestring.string
+        val interested : Bytestring.string
+        val notInterested : Bytestring.string
       end
