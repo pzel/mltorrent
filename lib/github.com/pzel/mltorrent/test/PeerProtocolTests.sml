@@ -27,9 +27,8 @@ val tt = [
                 0wx30, 0wx30, 0wx30, 0wx30, 0wx30, 0wx30, 0wx30, 0wx73, 0wx69, 0wx6D, 0wx6F, 0wx6E]
            end)
  ,It "can create a keepalive message" (
-    fn()=> let val op== = Assert.eq PolyML.makestring
-           in keepalive == bin[0w0,0w0,0w0,0w0]
-           end)
+    fn()=> (keepalive === bin[0w0,0w0,0w0,0w0])PolyML.makestring)
+
  ,It "can create choke/unchoke/interested/notInterested messages" (
     fn()=>( (choke =??= bin[0w0,0w0,0w0,0w1,0w0]) "choke"
           ; (unchoke =??= bin[0w0,0w0,0w0,0w1,0w1]) "unchoke"
@@ -37,6 +36,29 @@ val tt = [
           ; (notInterested =??= bin[0w0,0w0,0w0,0w1,0w3]) "notInterested"
           ; Assert.succeed "Messages 0-4 trivially valid"))
 
+ ,It "can create a bitfield with only piece 0" (
+    fn()=> (bitfield[0] === bin[0wx0, 0wx0, 0wx0, 0wx2,  (*length*)
+                                0wx5, (*bitfield tag*)
+                                0w128] (*the bitfield binary *)
+           ) PolyML.makestring)
+
+ ,It "can create a bitfield with pieces 0, 8, and 9" (
+    fn()=> (bitfield[0,8,9] === bin[0wx0, 0wx0, 0wx0, 0wx3,
+                                    0wx5,
+                                    0w128, 0w192]) PolyML.makestring)
+
+ ,It "can create a bitfield with pieces 0, 8, and 9 even if unsorted" (
+    fn()=> (bitfield[9,8,0] === bin[0wx0, 0wx0, 0wx0, 0wx3,
+                                    0wx5,
+                                    0w128, 0w192]) PolyML.makestring)
+
+ ,It "can create a bitfield with pieces 7, 15 and 127 (low bits)" (
+    fn()=> (bitfield[7,15,127] === bin[0wx0, 0wx0, 0wx0, 0wx11, 0wx5,
+                                       (* the bitfield *)
+                                       0w1, 0w1, 0wx0, 0wx0,
+                                       0wx0, 0wx0, 0wx0, 0wx0,
+                                       0wx0, 0wx0, 0wx0, 0wx0,
+                                       0wx0, 0wx0, 0wx0, 0w1]) PolyML.makestring)
 ]
 
 in
