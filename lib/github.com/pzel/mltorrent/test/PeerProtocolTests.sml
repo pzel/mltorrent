@@ -25,7 +25,10 @@ val tt = [
                 0wx39, 0wx30, 0wx30, 0wx30, 0wx30, 0wx30, 0wx30, 0wx30, 0wx30,
                 0wx30, 0wx30, 0wx30, 0wx30, 0wx30, 0wx30, 0wx30, 0wx73, 0wx69, 0wx6D, 0wx6F, 0wx6E]
            end)
-
+ ,It "can create a keepalive" (
+    fn()=> let val op== = Assert.eq PolyML.makestring
+           in keepalive () == Word8Vector.fromList[0w0,0w0,0w0,0w0]
+           end)
 ]
 
 in
