@@ -44,7 +44,7 @@ fn z => let fun from m a p i ih = {metaInfo=m,announceHost=a,peers=p,info=i,info
         in FRU.makeUpdate5 (from, from, to) end z;
 
 type event = (bytestring * PeerProtocol.t)
-fun showEvent (peerId, event:PeerProtocol.t) = (Bytestring.toStringHex peerId ^":" ^PolyML.makestring event)
+fun showEvent (peerId, event:PeerProtocol.t) = (Bytestring.toStringHex peerId ^":" ^PeerProtocol.compactString event)
 
 local
   infix 1 >>=
@@ -228,12 +228,12 @@ fun recvOne ({socket=NONE,...}) : event option = NONE
       val join = Option.join
     in
       Socket.recvVecNB(socket, 4)
-      >>= (fn lenB => (printLn "A"; ConvertWord.bytesToWord32B' lenB)
-      >>= (fn len => (printLn (String.^("B",PolyML.makestring len)); Socket.recvVecNB(socket, Word32.toInt len))
+      >>= (fn lenB => ConvertWord.bytesToWord32B' lenB
+      >>= (fn len => Socket.recvVecNB(socket, Word32.toInt len)
       >>= (fn payload =>
               case PeerProtocol.parse (lenB^payload)
-               of INR proto => (printLn "X"; SOME (peerId, proto))
-                | _ => (printLn "C"; NONE))))
+               of INR proto => SOME (peerId, proto)
+                | _ => NONE)))
   end
 
 fun mkRequests (peerId, indexes) =
@@ -258,8 +258,7 @@ in case proto
      | Bitfield b => (t, [(peerId, Unchoke) , (peerId, Interested)]
                          @ (mkRequests (peerId, b))
                          @ outbox)
-     | Piece(idx, begin, data) => (printLn ("GOT PIECE"^PolyML.makestring(peerId,idx,begin));
-                                   (t, outbox))
+     | Piece(idx, begin, data) => (t, outbox)
      | Choke => (t, outbox) (* TODO handle *)
      | Unchoke => (t, outbox) (* TODO handle *)
      | other => (printLn ("GOT OTHER"^PolyML.makestring other); (t, outbox))

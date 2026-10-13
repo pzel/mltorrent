@@ -20,6 +20,8 @@ datatype t = Handshake of (bytestring * bytestring)
 val b = Bytestring.fromString
 val bin = Bytestring.fromWord8Vector o Word8Vector.fromList
 val bin32 = ConvertWord.word32ToBytesB o Word32.fromInt
+val hex = Bytestring.toStringHex
+val i2s = Int.toString
 fun bit (i: int) : Word8.word = Word8.<<(0w1,Word.fromInt (8-((i mod 8)+1)))
 
 fun serialize (Handshake(infoHash, peerId)) =
@@ -123,8 +125,21 @@ and parsePiece b =
       val data = extract(b, 8, NONE)
   in INR \> Piece(i idx, i begin, data)
   end handle Subscript => INL "Failed to parse `piece` message payload"
+end (*Local *)
 
-end end :
+fun compactString (Handshake(p,i)) = "Handshake ("^hex p^","^hex i^")"
+  | compactString (Keepalive) = "Keepalive"
+  | compactString (Choke) = "Choke"
+  | compactString (Unchoke) = "Unchoke"
+  | compactString (Interested) = "Interested"
+  | compactString (NotInterested) = "NotInterested"
+  | compactString (Have n) = "Have ("^Int.toString n^")"
+  | compactString (Bitfield l) = "Bitfield [" ^ String.concatWith "," (map i2s l) ^ "]"
+  | compactString (Request(i,b,l)) = "Request ("^i2s i^","^i2s b^","^i2s l^")"
+  | compactString (Piece(i,b,d)) = "Piece ("^i2s i^","^i2s b^",#"^Int.toString(Bytestring.size d)^")"
+  | compactString (Cancel(i,b,l)) ="Cancel ("^i2s i^","^i2s b^","^i2s l^")"
+
+end :
 sig
   datatype state = Fresh
                | HandshakeSent
@@ -143,4 +158,5 @@ sig
              | Cancel of (int * int * int)
   val serialize : t -> Bytestring.string
   val parse: Bytestring.string -> (string, t) either
+  val compactString : t -> string
 end
