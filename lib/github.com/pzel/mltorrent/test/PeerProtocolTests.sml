@@ -132,9 +132,15 @@ val pt = [
     fn()=> (parse (serialize \> Request(1,2,100)) === INR \> Request(1,2,100))
              PolyML.makestring)
 
- ,It"can create a cancel message"(
+ ,It"can parse a cancel message"(
     fn()=> (parse (serialize \> Cancel(3,17,231)) === INR \> Cancel(3,17,231))
              PolyML.makestring)
+
+ ,It"can parse a piece message"(
+    fn()=> (parse (serialize \> Piece(4,8,bin[0w11,0w22,0w33,0w44,0w55,0w66]))
+                  === INR \> Piece(4,8,bin[0w11,0w22,0w33,0w44,0w55,0w66]))
+             PolyML.makestring)
+
 
 ]
 

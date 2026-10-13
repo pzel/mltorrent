@@ -16,7 +16,6 @@ datatype t = Handshake of (bytestring * bytestring)
 val b = Bytestring.fromString
 val bin = Bytestring.fromWord8Vector o Word8Vector.fromList
 val bin32 = ConvertWord.word32ToBytesB o Word32.fromInt
-val w = Word.fromInt
 fun bit (i: int) : Word8.word = Word8.<<(0w1,Word.fromInt (8-((i mod 8)+1)))
 
 
@@ -63,9 +62,7 @@ and bitfield idxs =
       val outVector = Word8Vector.tabulate (length out, fn i => sub(out,i))
       val lengthPrefix = ConvertWord.word32ToBytesB (Word32.fromInt (length out + 1))
   in
-    Word8Vector.concat[lengthPrefix
-                      ,bin[0w5]
-                      ,outVector]
+    Word8Vector.concat[lengthPrefix, bin[0w5], outVector]
   end
 
 (* Assuming framing is handled on the tcp receiving end*)
@@ -81,6 +78,7 @@ fun parse b =
          | (0wx4, body) => parseHave body
          | (0wx5, body) => parseBitField body
          | (0wx6, body) => parseReqC Request body
+         | (0wx7, body) => parsePiece body
          | (0wx8, body) => parseReqC Cancel body
          | _ => INL "unhandled"
 
@@ -111,6 +109,14 @@ and parseReqC cons b =
       val length = PackWord32Big.subVec(b,2)
   in INR \> cons(i idx, i begin, i length)
   end handle Subscript => INL "Failed to parse `request/cancel` message payload"
+
+and parsePiece b =
+  let val i = LargeWord.toInt
+      val idx = PackWord32Big.subVec(b,0)
+      val begin = PackWord32Big.subVec(b,1)
+      val data = extract(b, 8, NONE)
+  in INR \> Piece(i idx, i begin, data)
+  end handle Subscript => INL "Failed to parse `piece` message payload"
 
 end end :
 sig
