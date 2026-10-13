@@ -103,6 +103,9 @@ fun decode' (subject: string) (input: string) : (string, t) either =
 
 val decode = decode' ""
 
+fun stringToBytes (String s) = Byte.stringToBytes s
+  | stringToBytes _ = Word8Vector.fromList[]
+
 fun keys (Dict kv) = map (fn (Key s, _) => s) kv
   | keys _ = []
 

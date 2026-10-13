@@ -8,6 +8,7 @@ datatype t = String of string
 val encode : t -> (string, string) either
 val decode : string -> (string, t) either
 val decode' : string -> string -> (string, t) either
+val stringToBytes : t -> Word8Vector.vector
 val keys : t -> string list
 val atKey : string -> t -> t option
 val access : string list -> t -> t option

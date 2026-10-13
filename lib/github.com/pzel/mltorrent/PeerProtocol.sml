@@ -1,6 +1,10 @@
 structure PeerProtocol = struct
 type bytestring = Bytestring.string
 type index = int
+datatype state = Fresh
+               | HandshakeSent
+               | HandshakeReceived  (* more: interested, choked, etc. *)
+
 datatype t = Handshake of (bytestring * bytestring)
            | Keepalive
            | Choke
@@ -17,7 +21,6 @@ val b = Bytestring.fromString
 val bin = Bytestring.fromWord8Vector o Word8Vector.fromList
 val bin32 = ConvertWord.word32ToBytesB o Word32.fromInt
 fun bit (i: int) : Word8.word = Word8.<<(0w1,Word.fromInt (8-((i mod 8)+1)))
-
 
 fun serialize (Handshake(infoHash, peerId)) =
   Bytestring.concat[
@@ -73,7 +76,7 @@ fun parse b =
   else if size b = 4
   then INR Keepalive
   else case (sub(b,4), extract(b, 5, NONE)) of
-           (0wx54, body) => parseHandshake body
+           (0wx54, _) => parseHandshake b
          | (0wx0, _) => INR Choke
          | (0wx1, _) => INR Unchoke
          | (0wx2, _) => INR Interested
@@ -86,9 +89,9 @@ fun parse b =
          | (w,_) => INL \> String.^("Unknown message type: 0x",Word8.toString w)
 
 and parseHandshake b =
-  if size b = 63
-  then INR \> Handshake (substring(b,23,20) ,substring(b,43,20))
-  else INL \> String.concat["bad handshake?", PolyML.makestring (size b)]
+  if size b = 68
+  then INR \> Handshake (substring(b,28,20) ,substring(b,48,20))
+  else INL \> String.concat["bad handshake?", PolyML.makestring (Bytestring.size b, Byte.bytesToString b)]
 
 and parseHave b =
   case ConvertWord.bytesToWord32B' b
@@ -123,6 +126,10 @@ and parsePiece b =
 
 end end :
 sig
+  datatype state = Fresh
+               | HandshakeSent
+               | HandshakeReceived  (* more: interested, choked, etc. *)
+
   datatype t = Handshake of (Bytestring.string * Bytestring.string)
              | Keepalive
              | Choke

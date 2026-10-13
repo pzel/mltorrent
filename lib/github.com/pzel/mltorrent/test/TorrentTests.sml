@@ -3,10 +3,11 @@ structure T = Torrent
 val _ = [
   It "provides a reasonable error message when file not found"
      (fn ()=> let val op == = Assert.eq PolyML.makestring
-                  val res = T.openTorrent "./test/nonexistentfile"
-                  val prefix = Either.mapLeft (fn x=> String.substring(x,0,154)) res
-              in prefix
-                 == INL \>
+                  val t = T.openTorrent "./test/nonexistentfile"
+                  val prefix = Either.mapLeft (fn x=> String.substring(x,0,154)) t
+                  val res = Either.asLeft prefix
+              in res
+                 == SOME \>
                     "Failed to open ./test/nonexistentfile\n"
                     ^"With error: SysErr (\"No such file or directory\", SOME ENOENT) "
                     ^"./test/nonexistentfile\nCurrent working directory was: "
@@ -16,10 +17,10 @@ val _ = [
  ,It "provides a reasonable error message when tracker is unparseable"
      (fn ()=> let val op == = Assert.eq PolyML.makestring
                   val res = T.openTorrent "./test/bad.torrent"
-              in res == INL \> "Couldn't parse announce: "
+                            >| Either.asLeft
+              in res == SOME \> "Couldn't parse announce: "
                                ^"uudp://tracker.opentrackr.org:1337/announce"
               end)
-
 
  ,It "reads a real info file"
      (fn ()=> case T.openTorrent "./test/local.torrent" of
@@ -70,7 +71,6 @@ val _ = [
             == INR "6444400e83ddbb7100010718094a4686032fc45b"
          end)
 
-
  ,It "can get announce IPs"
      (fn ()=>
          let val op == = Assert.eq PolyML.makestring
@@ -85,12 +85,9 @@ val _ = [
          in T.openTorrent "./test/local.torrent"
             >| Either.bindRight T.connect
             >| Either.mapRight #peers
-            >| Either.map (const 0, List.length)
+            >| Either.map (const false, fn x => List.length x >0)
             >| Either.proj
-           == 2
+           == true
          end)
 
 ] >| addTests "torrent tests"
-
-
-
