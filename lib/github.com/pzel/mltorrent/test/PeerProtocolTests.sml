@@ -32,10 +32,10 @@ val gt = [
     fn()=> (serialize Keepalive === bin[0w0,0w0,0w0,0w0])PolyML.makestring)
 
  ,It "can serialize choke/unchoke/interested/notInterested messages" (
-    fn()=>( (serialize Choke =??= bin[0w0,0w0,0w0,0w1,0w0]) "choke"
-          ; (serialize Unchoke =??= bin[0w0,0w0,0w0,0w1,0w1]) "unchoke"
-          ; (serialize Interested =??= bin[0w0,0w0,0w0,0w1,0w2]) "interested"
-          ; (serialize NotInterested =??= bin[0w0,0w0,0w0,0w1,0w3]) "notInterested"
+    fn()=>( (serialize Choke =??= bin[0w0,0w0,0w0,0w1,0w0]) PolyML.makestring
+          ; (serialize Unchoke =??= bin[0w0,0w0,0w0,0w1,0w1]) PolyML.makestring
+          ; (serialize Interested =??= bin[0w0,0w0,0w0,0w1,0w2]) PolyML.makestring
+          ; (serialize NotInterested =??= bin[0w0,0w0,0w0,0w1,0w3]) PolyML.makestring
           ; Assert.succeed "Messages 0-4 trivially valid"))
 
  ,It "can serialize a `have` message" (
@@ -95,7 +95,46 @@ val gt = [
 ]
 
 val pt = [
-  Pending "Can parse a handshake" (fn()=> (Assert.fail "supda"))
+  It "Can parse a handshake" (
+    fn()=> let val op == = Assert.eq PolyML.makestring
+               val infoHash = b"01234567890123456789"
+               val peerId =   b"000000000000000simon"
+               val payload = serialize \> Handshake(infoHash, peerId)
+           in parse payload == INR \> Handshake(infoHash, peerId) end)
+ ,It "can parse a keepalive message" (
+    fn()=> (parse \> serialize Keepalive === INR Keepalive) PolyML.makestring)
+
+ ,It "can parse the four trivial messages" (
+    fn()=>( (parse \> serialize Choke =??= INR Choke) PolyML.makestring
+          ; (parse \> serialize Unchoke =??= INR Unchoke) PolyML.makestring
+          ; (parse \> serialize Interested =??= INR Interested) PolyML.makestring
+          ; (parse \> serialize NotInterested =??= INR NotInterested) PolyML.makestring
+          ; Assert.succeed "Messages 0-4 trivially valid"))
+
+ ,It "can parse a `have` message" (
+    fn()=> (parse \> serialize (Have 4) === INR \> Have 4)
+             PolyML.makestring)
+
+ ,It "can parse a `have` message for a large index" (
+    fn()=> (parse \> serialize (Have 4294967295) === INR \> Have 4294967295)
+             PolyML.makestring)
+
+ ,It "can parse a bitfield with only piece 0" (
+    fn()=> (parse (serialize \> Bitfield[0]) === INR \> Bitfield[0])
+             PolyML.makestring)
+
+ ,It "can parse a bitfield with pieces 7, 15 and 127 (low bits)" (
+    fn()=> (parse (serialize (Bitfield[7,15,127])) === INR \> Bitfield[7,15,127])
+             PolyML.makestring)
+
+
+ ,It"can parse a request message"(
+    fn()=> (parse (serialize \> Request(1,2,100)) === INR \> Request(1,2,100))
+             PolyML.makestring)
+
+ ,It"can create a cancel message"(
+    fn()=> (parse (serialize \> Cancel(3,17,231)) === INR \> Cancel(3,17,231))
+             PolyML.makestring)
 
 ]
 

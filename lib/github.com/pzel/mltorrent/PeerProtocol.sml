@@ -16,6 +16,9 @@ datatype t = Handshake of (bytestring * bytestring)
 val b = Bytestring.fromString
 val bin = Bytestring.fromWord8Vector o Word8Vector.fromList
 val bin32 = ConvertWord.word32ToBytesB o Word32.fromInt
+val w = Word.fromInt
+fun bit (i: int) : Word8.word = Word8.<<(0w1,Word.fromInt (8-((i mod 8)+1)))
+
 
 fun serialize (Handshake(infoHash, peerId)) =
   Bytestring.concat[
@@ -36,22 +39,23 @@ fun serialize (Handshake(infoHash, peerId)) =
      ,ConvertWord.word32ToBytesB (Word32.fromInt idx)]
 
   | serialize (Bitfield idxs) = bitfield idxs
+
   | serialize (Request(idx,begin,length)) =
     Word8Vector.concat
       [bin32 13,bin[0w6],bin32 idx,bin32 begin,bin32 length]
+
   | serialize (Cancel(idx,begin,length)) =
     Word8Vector.concat
       [bin32 13,bin[0w8],bin32 idx,bin32 begin,bin32 length]
+
   | serialize (Piece(idx,begin,d)) =
     Word8Vector.concat
       [bin32(Word8Vector.length d+9),bin[0w7],bin32 idx,bin32 begin,d]
 
 and bitfield idxs =
   let open Array
-      val op<< =Word8.<< ; infix <<
       val maxIdx = List.foldl Int.max 0 idxs
       fun outIdx inIdx = (inIdx div 8)
-      fun bit idx = 0w1 << (Word.fromInt (8-((idx mod 8)+1)))
       val out : Word8.word array = array(outIdx maxIdx + 1, 0w0)
       val _ = List.app (fn i => let val acc = sub(out, outIdx i)
                                     val new = Word8.orb(acc, bit i)
@@ -64,7 +68,51 @@ and bitfield idxs =
                       ,outVector]
   end
 
-end :
+(* Assuming framing is handled on the tcp receiving end*)
+local open Bytestring in
+fun parse b =
+  if size b < 5 then INR Keepalive
+  else case (sub(b,4), extract(b, 5, NONE)) of
+           (0wx54, body) => parseHandshake body
+         | (0wx0, _) => INR Choke
+         | (0wx1, _) => INR Unchoke
+         | (0wx2, _) => INR Interested
+         | (0wx3, _) => INR NotInterested
+         | (0wx4, body) => parseHave body
+         | (0wx5, body) => parseBitField body
+         | (0wx6, body) => parseReqC Request body
+         | (0wx8, body) => parseReqC Cancel body
+         | _ => INL "unhandled"
+
+and parseHandshake b =
+  if size b = 63
+  then INR \> Handshake (substring(b,23,20) ,substring(b,43,20))
+  else INL \> String.concat["bad handshake?", PolyML.makestring (size b)]
+
+and parseHave b =
+  case ConvertWord.bytesToWord32B' b
+   of (SOME word) => INR (Have (Word32.toInt word))
+    | _ => INL "Failed to parse `have` message payload"
+
+and parseBitField b =
+  let val masks = List.tabulate(8, fn i => (i, bit i))
+      fun extract (offset,b,acc) =
+        (List.mapPartial (fn (i,m) =>
+                             if Word8.andb(b, m) > 0w0
+                             then SOME(offset*8+i)
+                             else NONE) masks) @ acc
+  in INR (Bitfield \> Word8Vector.foldri extract [] b)
+  end
+
+and parseReqC cons b =
+  let val i = LargeWord.toInt
+      val idx = PackWord32Big.subVec(b,0)
+      val begin = PackWord32Big.subVec(b,1)
+      val length = PackWord32Big.subVec(b,2)
+  in INR \> cons(i idx, i begin, i length)
+  end handle Subscript => INL "Failed to parse `request/cancel` message payload"
+
+end end :
 sig
   datatype t = Handshake of (Bytestring.string * Bytestring.string)
              | Keepalive
@@ -78,17 +126,5 @@ sig
              | Piece of (int * int * Bytestring.string)
              | Cancel of (int * int * int)
   val serialize : t -> Bytestring.string
-(*
-  val handshake : (Bytestring.string) -> (Bytestring.string) -> Bytestring.string
-  val keepalive :  Bytestring.string
-  val choke : Bytestring.string
-  val unchoke : Bytestring.string
-  val interested : Bytestring.string
-  val notInterested : Bytestring.string
-  val have : int -> Bytestring.string
-  val bitfield : int list -> Bytestring.string
-  val request : int -> int -> int -> Bytestring.string
-  val cancel : int -> int -> int -> Bytestring.string
-  val piece : int -> int ->  Bytestring.string -> Bytestring.string
-*)
+  val parse: Bytestring.string -> (string, t) either
 end
