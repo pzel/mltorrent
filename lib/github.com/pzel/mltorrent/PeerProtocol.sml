@@ -68,10 +68,10 @@ and bitfield idxs =
 (* Assuming framing is handled on the tcp receiving end*)
 local open Bytestring in
 fun parse b =
-  if size b = 4
-  then INR Keepalive
-  else if size b < 4
+  if size b < 4
   then INL \> String.^("Message too short: ", PolyML.makestring b)
+  else if size b = 4
+  then INR Keepalive
   else case (sub(b,4), extract(b, 5, NONE)) of
            (0wx54, body) => parseHandshake body
          | (0wx0, _) => INR Choke
