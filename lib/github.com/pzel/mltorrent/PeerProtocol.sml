@@ -68,7 +68,10 @@ and bitfield idxs =
 (* Assuming framing is handled on the tcp receiving end*)
 local open Bytestring in
 fun parse b =
-  if size b < 5 then INR Keepalive
+  if size b = 4
+  then INR Keepalive
+  else if size b < 4
+  then INL \> String.^("Message too short: ", PolyML.makestring b)
   else case (sub(b,4), extract(b, 5, NONE)) of
            (0wx54, body) => parseHandshake body
          | (0wx0, _) => INR Choke
@@ -80,7 +83,7 @@ fun parse b =
          | (0wx6, body) => parseReqC Request body
          | (0wx7, body) => parsePiece body
          | (0wx8, body) => parseReqC Cancel body
-         | _ => INL "unhandled"
+         | (w,_) => INL \> String.^("Unknown message type: 0x",Word8.toString w)
 
 and parseHandshake b =
   if size b = 63

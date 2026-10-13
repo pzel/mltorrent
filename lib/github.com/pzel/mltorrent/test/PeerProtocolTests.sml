@@ -141,6 +141,20 @@ val pt = [
                   === INR \> Piece(4,8,bin[0w11,0w22,0w33,0w44,0w55,0w66]))
              PolyML.makestring)
 
+ ,It"will parse zero-length messages as keepalives"(
+    fn()=> (parse \> bin[0w0,0w0,0w0,0w0]
+                        === INR Keepalive)
+             PolyML.makestring)
+
+ ,It"will fail to parse messages shorter than 4 bytes"(
+    fn()=> (parse \> bin[0w0,0w0,0w0]
+                        === INL ("Message too short: fromList[0wx0, 0wx0, 0wx0]"))
+             PolyML.makestring)
+
+ ,It"will fail to parse messages with unknown code"(
+    fn()=> (parse \> bin[0w0,0w0,0w0,0w5,0wxB]
+                        === INL ("Unknown message type: 0xB"))
+             PolyML.makestring)
 
 ]
 
