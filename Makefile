@@ -28,7 +28,7 @@ test: bin/test
 
 .PHONY: t
 t: bin/test
-	./$< --filter=$$f
+	./$< --filter $$f
 
 .PHONY: repl
 repl:
