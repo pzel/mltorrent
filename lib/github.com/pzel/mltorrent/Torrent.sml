@@ -2,22 +2,23 @@ structure Torrent = struct
 type bencode = Bencode.t
 type bytestring = Bytestring.string
 type tcp_socket = (INetSock.inet, Socket.active Socket.stream) Socket.sock
+type w32 = Word32.word
 
 datatype info =
          SingleFile of { name: Bytestring.string
-                    , pieceLength: int
+                    , pieceLength: w32
                     , pieces: bytestring vector
-                    , length : int
+                    , length : w32
                     }
        | ManyFiles of { name: Bytestring.string
-                   , pieceLength: int
+                   , pieceLength: w32
                    , pieces: Bytestring.string vector
-                   , files: ({ length : int, path: bytestring list} list)
+                   , files: ({ length : w32, path: bytestring list} list)
                    }
 
 type peer = { addr: NetHostDB.in_addr
             , port: int
-            , pieces: int list
+            , pieces: w32 list
             , peerId: bytestring
             , state: PeerProtocol.state
             , socket: tcp_socket option
@@ -77,8 +78,8 @@ in
           case (n,l,pl,pcs)
            of (String n, Integer l, Integer pl, String pcs) =>
               INR \> SingleFile { name= Bytestring.fromString n
-                                , length=Int.fromLarge l
-                                , pieceLength=Int.fromLarge pl
+                                , length=Word32.fromLargeInt l
+                                , pieceLength=Word32.fromLargeInt pl
                                 , pieces = Vector.fromList [Bytestring.fromString pcs]
                                 }
             | _ => INL "Malformed info data"))))

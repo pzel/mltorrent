@@ -63,10 +63,10 @@ and tupleParser () =
   >>= (fn v => return (k,v)))
 
 and bencodeParser () =
-  (try (dictParser()))
-  <|> (try stringParser)
-  <|> (try integerParser)
-  <|> (try (listParser()))
+  stringParser
+  <|> integerParser
+  <|> (dictParser())
+  <|> (listParser())
 
 
 local

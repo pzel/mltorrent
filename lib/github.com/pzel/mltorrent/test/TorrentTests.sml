@@ -57,8 +57,8 @@ val _ = [
              val expectedPiece = Word8Vector.fromList[0wxB4, 0wx39, 0wx43, 0wx88, 0wx42, 0wxEC, 0wxC4, 0wx95, 0wx87, 0wx52, 0wx2F, 0wx62, 0wx96, 0wx89, 0wx2F, 0wx10, 0wx46, 0wx67, 0wxA9, 0wx61]
          in (#info t) == T.SingleFile {
               name= bs "scratch.png"
-             ,length=100506
-             ,pieceLength=262144
+             ,length=0w100506
+             ,pieceLength=0w262144
              ,pieces= Vector.fromList[expectedPiece]
             }
          end)
