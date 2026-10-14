@@ -79,6 +79,15 @@ val _ = [
             == INR "localhost"
          end)
 
+ ,It "gets all pieces"
+     (fn ()=>
+         let val op == = Assert.eq PolyML.makestring
+         in T.openTorrent "./test/local2.torrent"
+            >| Either.mapRight (T.pieceCount o #info)
+            == INR 2
+         end)
+
+
  ,It "can get a list of peers (sham non-deterministic data atm)"
      (fn ()=>
          let val op == = Assert.eq PolyML.makestring

@@ -8,7 +8,7 @@ ifeq ($(MLCOMP), polymlb)
 MLCOMP_FLAGS=-default-ann "ignoreFiles call-main.sml"
 POLY_PATH := -mlb-path-var "POLY \$$(SML_LIB)/basis/"
 else
-MLCOMP_FLAGS=-default-ann "allowRecordPunExps true"
+MLCOMP_FLAGS=-default-ann "allowRecordPunExps true" -default-type int64
 POLY_PATH := -mlb-path-var "POLY \$$(SMLPKG)/github.com/pzel/polyml-fill/"
 MAIN_MLB=$(LIBDIR)/call-main.mlb
 endif
@@ -45,6 +45,13 @@ stop-tracker:
 	| awk '{print $$2}' \
 	| xargs kill -9
 
+.PHONY: e2e-test
+e2e-test: bin/mltorrent ensure-tracker-running
+	# TODO: also ensure-seeder-running,
+	rm -f ./scratch.png
+	./bin/mltorrent ./support/local.torrent
+	diff ./scratch.png ./support/scratch.png
+
 bin/test: $(shell find $(LIBDIR)) ensure-tracker-running
 	$(COMP) $@ $(LIBDIR)/test/test.mlb
 
@@ -59,6 +66,12 @@ support/local.torrent: support/scratch.png
 	&& mktorrent -o local.torrent \
 		     -a http://localhost:6969/announce \
 		     scratch.png
+
+support/local2.torrent: support/bt-paper.pdf
+	mkdir -p support
+	mktorrent -o $@ \
+	          -a http://localhost:6969/announce \
+                   $<
 support/scratch.png:
 	cd support && curl -O https://pzel.name/img/scratch.png
 
