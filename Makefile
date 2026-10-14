@@ -26,6 +26,10 @@ clean:
 test: bin/test
 	./$< --progress
 
+.PHONY: t
+t: bin/test
+	./$< --filter=$$f
+
 .PHONY: repl
 repl:
 	polymlb-repl $(MAIN_MLB)

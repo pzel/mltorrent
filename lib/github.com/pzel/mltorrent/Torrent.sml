@@ -31,21 +31,26 @@ fn z =>
    in FRU.makeUpdate6 (from, from, to) end z;
 
 (* todo unhardcode *)
-val peerId = Bytestring.fromString "000000000000000simon"
+val PEER_ID = Bytestring.fromString "000000000000000simon"
+val PIECE_SIZE = 1024*16
 
 type t = { metaInfo : bencode
          , announceHost : URL.t
          , peers : peer list
          , info : info
          , infoHash : bytestring
-         , downloaded : Word8Array.array
+         , downloaded : Word8Array.array (* should be on disk or mmaped? *)
+         , completed : bool Array.array
          }
 
 val updateT =
 fn z =>
-   let fun from m a p i ih d= {metaInfo=m,announceHost=a,peers=p,info=i,infoHash=ih,downloaded=d}
-       fun to f {metaInfo=m,announceHost=a,peers=p,info=i,infoHash=ih,downloaded=d} = f m a p i ih d
-   in FRU.makeUpdate6 (from, from, to) end z;
+   let fun from m a p i ih d cp = {
+         metaInfo=m,announceHost=a,peers=p,info=i,infoHash=ih,downloaded=d,completed=cp}
+       fun to f {
+         metaInfo=m,announceHost=a,peers=p,info=i,infoHash=ih,downloaded=d,completed=cp} =
+         f m a p i ih d cp
+   in FRU.makeUpdate7 (from, from, to) end z;
 
 type event = (bytestring * PeerProtocol.t)
 fun showEvent (peerId, event:PeerProtocol.t) = (Bytestring.toStringHex peerId ^":" ^PeerProtocol.compactString event)
@@ -57,6 +62,7 @@ local
   val set = FRU.set
   val v = Word8VectorSlice.full
   val b = Bytestring.fromString
+  val i2s = Int.toString
 in
 
 fun parseMetaInfoFile (filePath: string) : (string, bencode) either =
@@ -72,8 +78,8 @@ fun parseMetaInfoFile (filePath: string) : (string, bencode) either =
 fun parseInfo (dict: Bencode.t) : (string, info) either = let
   open Bencode
   fun split b =
-    Vector.tabulate(Bytestring.size b div 20, 
-                    fn i => Bytestring.substring(b, i, 20))
+    Vector.tabulate(Bytestring.size b div 20,
+                    fn i => Bytestring.substring(b, (i*20), 20))
   fun k key = Either.fromOption ("parseInfo: Failed to find key: "^key) (atKey key dict)
 in
   k "name"
@@ -106,7 +112,7 @@ fun binToPeers (input: Bytestring.string) : (string, peer list) either =
         fun ss(idx) = (Bytesubstring.substring(input, idx*6, 4),
                        Bytesubstring.substring(input, idx*6+4, 2))
         val in_addr = Option.mapPartial (NetHostDB.fromString
-                                         o Int.toString
+                                         o i2s
                                          o Word32.toInt)
         val ips = map ss idxs
         val ipaddrs = map (fn (ip,port) =>
@@ -135,6 +141,7 @@ fun getHash (metaInfo: bencode) : (string, Bytestring.string) either =
   >>= Bencode.encode
   >>= INR o SHA1.hashString
 
+
 fun pieceLength(SingleFile{pieceLength=l,...}) = Word32.toInt l
   | pieceLength(ManyFiles{pieceLength=l,...}) = Word32.toInt l
 
@@ -151,11 +158,27 @@ fun totalLength (info: info) : int =
   case info of (ManyFiles _) => pieceLength info * pieceCount info
              | (SingleFile{length=l,...}) => Word32.toInt l
 
+fun pieceEnd (info: info) (idx: int) =
+  if idx + 1  = pieceCount info
+  then (totalLength info) mod (pieceLength info)
+  else pieceLength info
+
+fun hashPiece (t as {downloaded, info,...}:t) (idx : int) =
+  Bytestring.substring(Word8Array.vector downloaded
+                      , idx*pieceLength info
+                      , pieceEnd info idx)
+  >| SHA1.hashBytes
+
+
 fun pieceIdx (info: info) (idx: int) (begin: int) : int = pieceLength info*idx + begin
 
-fun writeFile (t as {info,downloaded,...}) =
+fun writeFile (t as ({info,downloaded,...}: t)) =
     let val os = BinIO.openOut (fileName info)
-    in (BinIO.output(os,Word8Array.vector downloaded); BinIO.closeOut os)
+    in (BinIO.output(os,Word8Array.vector downloaded)
+       ; BinIO.closeOut os
+       ; printLn \> "Wrote file " ^ fileName info
+       ; OS.Process.exit OS.Process.success
+       )
        handle X => (BinIO.closeOut os; raise X)
     end
 
@@ -173,6 +196,7 @@ fun openTorrent (filePath: string) : (string, t) either =
                ,info = i
                ,infoHash = h
                ,downloaded = Word8Array.array(totalLength i,0w0)
+               ,completed = Array.array(totalLength i, false)
       })))))
 
 fun getAddr ({hostname, port, ...} : URL.t) =
@@ -188,7 +212,7 @@ fun getPeersHttp (t as {announceHost=url, infoHash=h, metaInfo=m, ...}: t): (str
       ("compact", b"1")
      ,("info_hash", h)
      ,("left", b size)
-     ,("peer_id", peerId)
+     ,("peer_id", PEER_ID)
      ,("port", b"6881") (* TODO make port dynamic, makek peer_id dynamic too *)
      ,("uploaded", b"0")]
 in
@@ -214,8 +238,8 @@ fun connectToPeer (peer as {addr,port,...}: peer) : peer option =
 fun sendHandshake infoHash (peer as {socket=(SOME socket), state=PeerProtocol.Fresh,...}) : peer =
   let open PeerProtocol
       val _ = printLn("sending handshake "^PolyML.makestring peer);
-      val sent = Socket.sendVec(socket, v (serialize (Handshake(infoHash, peerId))))
-      val _ = printLn("sent n bytes: " ^ Int.toString sent)
+      val sent = Socket.sendVec(socket, v (serialize (Handshake(infoHash, PEER_ID))))
+      val _ = printLn("sent n bytes: " ^ i2s sent)
   in updatePeer peer (set#state HandshakeSent) $
   end
   | sendHandshake _ peer : peer = (
@@ -251,6 +275,7 @@ fun connect (t: t) : (string, t) either =
   getPeers t
   >>= sendHandshakes
   >>= receiveHandshakes
+  >>= (fn x=> (printLn (PolyML.makestring (#info x)); INR x))
 
 fun recvOne ({socket=NONE,...}) : event option = NONE
   | recvOne ({peerId,socket=(SOME socket),...}) : event option =
@@ -270,12 +295,12 @@ fun recvOne ({socket=NONE,...}) : event option = NONE
   end
 
 fun mkRequests (peerId, indexes) =
-  map (fn idx => (peerId, PeerProtocol.Request(idx, 0, 1024*16))) indexes
+  map (fn idx => (peerId, PeerProtocol.Request(idx, 0, PIECE_SIZE))) indexes
 
 fun sendToPeer t     _ {socket=NONE,...} = t
-  | sendToPeer t proto {socket=SOME socket,...} = let
+  | sendToPeer t proto {socket=SOME socket,peerId,...} = let
     val sent = Socket.sendVec(socket, v (PeerProtocol.serialize proto))
-    val _ = printLn("sent n bytes: " ^ Int.toString sent ^ "(msg):" ^ PolyML.makestring proto)
+    val _ = printLn("OUT: "^showEvent (peerId, proto))
   in t
   end
 
@@ -284,21 +309,34 @@ fun sendEvent (event as (peerId, proto), t) =
    of (SOME peer) => sendToPeer t proto peer
     | NONE => (printLn ("Unknown peer" ^ showEvent event); t)
 
-fun handlePiece (t as {downloaded,info,...}) outbox (peerId, PeerProtocol.Piece(idx,begin,data)) =
+fun checkCompletion (t as{info,downloaded,completed,...}:t) idx =
+  let val nComplete = Array.foldr (fn (x,s) => if x then s+1 else s) 0 completed
+      val allComplete = nComplete = pieceCount info
+      val _ = printLn\> "Downloaded piece: " ^ i2s idx
+      val _ = printLn\> String.concat[ "Completed "
+                                     , i2s nComplete
+                                     , "/"
+                                     , i2s (pieceCount info)
+                                     , " pieces"]
+  in if allComplete
+     then writeFile t
+     else ()
+  end
+
+
+fun handlePiece (t as {downloaded,info,completed,...}) outbox (peerId, PeerProtocol.Piece(idx,begin,data)) =
   let val di = pieceIdx info idx begin
       val _ = Word8Array.copyVec{src=data,dst=downloaded,di=di}
       val endPoint = begin+(Bytestring.size data)
-      val nextSize = Int.min(totalLength info - endPoint, 1024*16)
-      val _ = printLn(PolyML.makestring("nextsize=", nextSize, "endpoint=", endPoint, "totalLength=", totalLength info))
+      val nextSize = Int.min(pieceEnd info idx - endPoint, PIECE_SIZE)
       val (outMsg, newHash) =
         if nextSize <> 0
-        then ([(peerId, PeerProtocol.Request(idx, begin+1024*16, nextSize))], NONE)
-        else ([], SOME (SHA1.hashBytes (Word8Array.vector downloaded)))
-      val _ = printLn(PolyML.makestring("new hash", newHash))
-  in if newHash = SOME (Vector.sub(pieceHashes info,0))
-     then (writeFile t;
-           printLn\> "Downloaded file: "^fileName info;
-           OS.Process.exit OS.Process.success; (t, []))
+        then ([(peerId, PeerProtocol.Request(idx, begin+PIECE_SIZE, nextSize))], NONE)
+        else ([], SOME (hashPiece t idx))
+  in if newHash = SOME (Vector.sub(pieceHashes info,idx))
+     then (Array.update(completed, idx, true)
+          ; checkCompletion t idx
+          ; (t, outbox)) (* TODO send out HAVE *)
      else (t, outMsg @ outbox)
   end
 
@@ -315,13 +353,14 @@ in case proto
      | other => (printLn ("GOT OTHER"^PolyML.makestring other); (t, outbox))
 end
 
-
 fun loop (t: t) : unit =
-  let val _ = print "."
+  let (*  val _ = print "." *)
       val events = List.mapPartial recvOne (#peers t)
-      val _ = app (printLn o showEvent) events
+      val _ = app ((fn ev => printLn("IN:"^ev)) o showEvent) events
       val (t', outbox) = List.foldl updateState (t,[]) events
-      val _ = if null events then OS.Process.sleep(Time.fromSeconds 1) else ()
+      val _ = if null events
+              then OS.Process.sleep(Time.fromMilliseconds 100)
+              else ()
       val t'' = List.foldl sendEvent t' outbox
   in loop t'' end
 

@@ -87,6 +87,18 @@ val _ = [
             == INR 2
          end)
 
+ ,It "gets the correct piece hashes (concatenated pieces == original string in info)"
+     (fn ()=>
+         let val op == = Assert.eq PolyML.makestring
+             fun force (INR s) = s | force (_) = raise (Fail "force");
+             val t = T.openTorrent "./test/local2.torrent"
+             val metaInfo = force \> Either.mapRight #metaInfo t
+             val info = force \> Either.mapRight #info t
+             val v2l = Vector.foldr op:: []
+             val parsed = Bytestring.concat(v2l(T.pieceHashes info))
+             val raw = Option.map Bencode.stringToBytes (Bencode.access ["info", "pieces"] metaInfo)
+         in SOME parsed == raw
+         end)
 
  ,It "can get a list of peers (sham non-deterministic data atm)"
      (fn ()=>
