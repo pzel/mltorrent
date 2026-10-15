@@ -262,9 +262,14 @@ fun connectToPeer (peer as {addr,port,...}: peer) : peer option =
   (* socket will be NONE if unable to connect *)
   let val s = INetSock.TCP.socket ()
       val _ = printLn("Connecting to" ^ PolyML.makestring peer)
-      val _ = Socket.connect (s, INetSock.toAddr(addr, port))
-  in SOME (updatePeer peer (set#socket (SOME s)) $)
-  end handle _ => ( printLn ("UNABLE TO CONNECT " ^ PolyML.makestring peer); NONE)
+      val p = (Timeout.connect (s, INetSock.toAddr(addr, port), Time.fromSeconds 1)
+              >>= (fn sock => INR (updatePeer peer (set#socket (SOME sock)) $)))
+  in case p of
+         (INR p) => SOME p
+       | (INL e) => (printLn \> "CONNECT ERROR: "^e^"\nDROPPING PEER "^PolyML.makestring peer
+                    ; NONE)
+  end
+
 
 fun sendHandshake infoHash (peer as {socket=(SOME socket), state=PeerProtocol.Fresh,...}) : peer =
   let open PeerProtocol
@@ -322,7 +327,7 @@ fun recvOne ({socket=NONE,...}) : event option = NONE
       >>= (fn payload =>
               case PeerProtocol.parse (lenB^payload)
                of INR proto => SOME (peerId, proto)
-                | _ => NONE)))
+                | other => (printLn(String.^("failed recv ",PolyML.makestring other)); NONE))))
   end
 
 fun mkRequests (peerId, indexes) =
