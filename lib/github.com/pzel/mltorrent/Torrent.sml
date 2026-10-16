@@ -270,7 +270,6 @@ fun connectToPeer (peer as {addr,port,...}: peer) : peer option =
                     ; NONE)
   end
 
-
 fun sendHandshake infoHash (peer as {socket=(SOME socket), state=PeerProtocol.Fresh,...}) : peer =
   let open PeerProtocol
       val _ = printLn("sending handshake "^PolyML.makestring peer);
