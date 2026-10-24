@@ -18,8 +18,6 @@ fun withTimeout (timeout: Time.time) (f: ({} -> 'b option)) : (string, 'b) eithe
 in loop ()
 end
 
-
-
 fun connect (s,addr,t) =
   (if Socket.connectNB (s, addr)
    then INR s
@@ -27,8 +25,8 @@ fun connect (s,addr,t) =
                           ,wrs=[Socket.sockDesc s]
                           ,exs=[]
                           ,timeout=SOME t}
-         of {rds=[],wrs=[_],exs=[]} => (Socket.sendVec(s, zero) ; INR s)
-          | other => INL \> cc["Socket to"
+         of {rds=[],wrs=[_],exs=[]} => (ignore \> Socket.sendVec(s, zero) ; INR s)
+          | other => INL \> cc["Socket to "
                               , NetHostDB.toString(#1(INetSock.fromAddr addr))
                               , ":" , Int.toString(#2(INetSock.fromAddr addr))
                               , " not ready after timeout: "

@@ -28,11 +28,11 @@ val _ = [
                   INR _ => succeed "parsed"
                 | INL x => Assert.fail x)
 
- ,It "retains contains all the fields from the file in the metaInfo field"
+ ,It "retains contains all the fields from the file in the rawMeta field"
      (fn ()=>
          let val op == = Assert.eq PolyML.makestring
          in T.openTorrent "./test/local.torrent"
-            >| Either.mapRight (B.keys o #metaInfo)
+            >| Either.mapRight (B.keys o #rawMeta)
             == INR ["announce", "created by", "creation date", "info"]
          end)
 
@@ -42,7 +42,7 @@ val _ = [
              fun join (SOME (SOME x)) = (SOME x)
                | join _ = NONE
          in T.openTorrent "./test/local.torrent"
-            >| Either.mapRight (B.atKey "announce" o #metaInfo)
+            >| Either.mapRight (B.atKey "announce" o #rawMeta)
             >| Either.asRight
             >| join
             == SOME (B.String "http://localhost:6969/announce")
@@ -96,11 +96,11 @@ val _ = [
          let val op == = Assert.eq PolyML.makestring
              fun force (INR s) = s | force (_) = raise (Fail "force");
              val t = T.openTorrent "./test/local2.torrent"
-             val metaInfo = force \> Either.mapRight #metaInfo t
+             val rawMeta = force \> Either.mapRight #rawMeta t
              val info = force \> Either.mapRight #info t
              val v2l = Vector.foldr op:: []
              val parsed = Bytestring.concat(v2l(T.pieceHashes info))
-             val raw = Option.map Bencode.stringToBytes (Bencode.access ["info", "pieces"] metaInfo)
+             val raw = Option.map Bencode.stringToBytes (Bencode.access ["info", "pieces"] rawMeta)
          in SOME parsed == raw
          end)
 

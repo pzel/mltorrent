@@ -34,7 +34,7 @@ fn z =>
 val PEER_ID = Bytestring.fromString "000000000000000simon"
 val PIECE_SIZE = 1024*16
 
-type t = { metaInfo : bencode
+type t = { rawMeta : bencode
          , announceHost : URL.t
          , peers : peer list
          , info : info
@@ -46,9 +46,9 @@ type t = { metaInfo : bencode
 val updateT =
 fn z =>
    let fun from m a p i ih d cp = {
-         metaInfo=m,announceHost=a,peers=p,info=i,infoHash=ih,downloaded=d,completed=cp}
+         rawMeta=m,announceHost=a,peers=p,info=i,infoHash=ih,downloaded=d,completed=cp}
        fun to f {
-         metaInfo=m,announceHost=a,peers=p,info=i,infoHash=ih,downloaded=d,completed=cp} =
+         rawMeta=m,announceHost=a,peers=p,info=i,infoHash=ih,downloaded=d,completed=cp} =
          f m a p i ih d cp
    in FRU.makeUpdate7 (from, from, to) end z;
 
@@ -169,7 +169,6 @@ fun getHash (metaInfo: bencode) : (string, Bytestring.string) either =
   >>= Bencode.encode
   >>= INR o SHA1.hashString
 
-
 fun pieceLength(SingleFile{pieceLength=l,...}) = Word32.toInt l
   | pieceLength(ManyFiles{pieceLength=l,...}) = Word32.toInt l
 
@@ -221,13 +220,13 @@ fun openTorrent (filePath: string) : (string, t) either =
                                   (Bencode.atKey "info" m)
   >>= (fn infoKey=> parseInfo infoKey
   >>= (fn i=>
-          INR {metaInfo = m
-               ,announceHost = url
-               ,peers = []
-               ,info = i
-               ,infoHash = h
-               ,downloaded = Word8Array.array(totalLength i,0w0)
-               ,completed = Array.array(totalLength i, false)
+          INR {rawMeta = m
+              ,announceHost = url
+              ,peers = []
+              ,info = i
+              ,infoHash = h
+              ,downloaded = Word8Array.array(totalLength i,0w0)
+              ,completed = Array.array(totalLength i, false)
       })))))
 
 fun getAddr ({hostname, port, ...} : URL.t) =
@@ -235,7 +234,11 @@ fun getAddr ({hostname, port, ...} : URL.t) =
    of NONE => INL ("Failed to resolve " ^ hostname)
     | SOME addr => INR (INetSock.toAddr (NetHostDB.addr addr, port))
 
-fun getPeersHttp (t as {announceHost=url, infoHash=h, metaInfo=m, ...}: t): (string, t) either = let
+fun getPeersHttp (t as {announceHost=url, infoHash=h, rawMeta=m, ...}: t): (string, t) either = let
+  fun showHeaders h = "["^(String.concatWith "," (map (fn (a,b) => "(" ^ a ^ "," ^ b ^ ")") h))^"]"
+  fun rejectForStatus {status,body,headers} = if status < 300
+                                              then INR body
+                                              else INL ("bad request:"^body^(showHeaders headers)^(PolyML.makestring status))
   val size = case Bencode.access ["info", "length"] m
               of SOME (Bencode.Integer i) => IntInf.toString i
                | _ => "0"
@@ -247,10 +250,11 @@ fun getPeersHttp (t as {announceHost=url, infoHash=h, metaInfo=m, ...}: t): (str
      ,("port", b"6881") (* TODO make port dynamic, makek peer_id dynamic too *)
      ,("uploaded", b"0")]
 in
-  Fetch.get u
+  (Fetch.perform u {method="GET"} NONE
+  >>= rejectForStatus
   >>= Bencode.decode' "peers"
   >>= parsePeers
-  >>= (fn p => INR \> updateT t (set#peers p) $)
+  >>= (fn p => INR \> updateT t (set#peers p) $))
 end
 
 fun getPeers (t: t) : (string, t) either =
@@ -307,10 +311,10 @@ fun receiveHandshakes (t as {peers,infoHash,...}: t) : (string, t) either =
   end
 
 fun connect (t: t) : (string, t) either =
-  getPeers t
+  (INR t)
+  >>= getPeers
   >>= sendHandshakes
   >>= receiveHandshakes
-  >>= (fn x=> (printLn (PolyML.makestring (#info x)); INR x))
 
 fun recvOne ({socket=NONE,...}) : event option = NONE
   | recvOne ({peerId,socket=(SOME socket),...}) : event option =
@@ -339,9 +343,16 @@ fun sendToPeer t     _ {socket=NONE,...} = t
   in t
   end
 
-fun sendEvent (event as (peerId, proto), t) =
+fun removePeer (t as {peers,...}:t) (targetId: bytestring) : t =
+  let val newPeers =
+        List.mapPartial (fn (peer as {peerId,...}) => if peerId = targetId
+                                                      then NONE
+                                                      else SOME peer) peers
+  in updateT t (set#peers newPeers) $ end
+
+fun sendEvent (event as (peerId, proto), t) : t =
   case List.find (fn {peerId=p,...} => p = peerId) (#peers t)
-   of (SOME peer) => sendToPeer t proto peer
+   of (SOME peer) => (sendToPeer t proto peer handle (OS.SysErr _) => removePeer t peerId)
     | NONE => (printLn ("Unknown peer" ^ showEvent event); t)
 
 fun checkCompletion (t as{info,downloaded,completed,...}:t) idx =
@@ -357,7 +368,6 @@ fun checkCompletion (t as{info,downloaded,completed,...}:t) idx =
      then writeFile t
      else ()
   end
-
 
 fun handlePiece (t as {downloaded,info,completed,...}) outbox (peerId, PeerProtocol.Piece(idx,begin,data)) =
   let val di = pieceIdx info idx begin
