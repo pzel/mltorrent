@@ -16,5 +16,6 @@ BENCODE.sig
 Bencode.sml
 Url.sml
 PeerProtocol.sml
+MetaInfo.sml
 Torrent.sml
 
