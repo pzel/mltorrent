@@ -1,21 +1,108 @@
-structure Torrent = struct
 type bencode = Bencode.t
 type bytestring = Bytestring.string
 type tcp_socket = (INetSock.inet, Socket.active Socket.stream) Socket.sock
 type w32 = Word32.word
+val cc = String.concat
 
-datatype info =
+structure MetaInfo = struct
+local
+  structure BS = Bytestring
+  structure B = Bencode
+  val o2e = Either.fromOption
+  fun split b = Vector.tabulate(BS.size b div 20, fn i => BS.substring(b, (i*20), 20))
+  fun k key dict = o2e ("parseInfo: Failed to find key: " ^ key)
+                       (B.atKey key dict)
+  infix 1 >>=
+  val op >>= = (fn (pre,post) => Either.bindRight post pre)
+
+in
+
+datatype t =
          SingleFile of { name: bytestring
-                    , pieceLength: w32
-                    , pieces: bytestring vector
-                    , length : w32
-                    }
-       | ManyFiles of { name: bytestring
-                   , pieceLength: w32
-                   , pieces: bytestring vector
-                   , files: ({ length : w32, path: bytestring list} list)
-                   }
+                       , pieceLength: w32
+                       , pieces: bytestring vector
+                       , length : w32
+                       }
+         | ManyFiles of { name: bytestring
+                        , pieceLength: w32
+                        , pieces: bytestring vector
+                        , files: ({ length : w32, path: bytestring list} list)
+                        }
 
+local type i = t; open Bencode in
+fun parseInfo (dict: bencode) : (string, i) either=
+  parseSingle dict >| Either.bindLeft (fn _ => parseMulti dict)
+
+and parseSingle d =
+  k"name"d
+  >>= (fn n => k"length"d
+  >>= (fn l => k"piece length"d
+  >>= (fn pl => k"pieces"d
+  >>= (fn pcs =>
+          case (n,l,pl,pcs)
+           of (String n, Integer l, Integer pl, String pcs) =>
+              INR \> SingleFile { name= Bytestring.fromString n
+                                , length=Word32.fromLargeInt l
+                                , pieceLength=Word32.fromLargeInt pl
+                                , pieces = split(Bytestring.fromString pcs)
+                                }
+            | _ => INL "Malformed info data"))))
+and parseMulti d =
+  k"name"d
+  >>= (fn n => Either.mapRight (parseFiles) (k"files"d)
+  >>= (fn files => k"piece length"d
+  >>= (fn pl => k"pieces"d
+  >>= (fn pcs =>
+          case (n,files,pl,pcs)
+           of (String n, SOME files, Integer pl, String pcs) =>
+              INR \> ManyFiles { name= Bytestring.fromString n
+                                , files=files
+                                , pieceLength=Word32.fromLargeInt pl
+                                , pieces = split(Bytestring.fromString pcs)
+                                }
+            | _ => INL "Malformed info data"))))
+and parseFiles (List(l)) =
+  let val vs = map (fn (d) => (k"length"d, k"path"d)) l
+      val good = List.mapPartial (fn (INR (Integer i), INR (List bs)) =>
+                                     SOME {length=Word32.fromLargeInt i
+                                          ,path=map stringToBytes bs}
+                                     | _ => NONE) vs
+  in if length good = length l then SOME good else NONE end
+  | parseFiles _ = NONE
+end
+end
+
+fun pieceLength (SingleFile{pieceLength=l,...}) = Word32.toInt l
+  | pieceLength(ManyFiles{pieceLength=l,...}) = Word32.toInt l
+
+fun pieceCount (SingleFile{pieces=p,...}) = Vector.length p
+  | pieceCount (ManyFiles{pieces=p,...}) = Vector.length p
+
+fun pieceHashes (SingleFile{pieces=p,...}) = p
+  | pieceHashes (ManyFiles{pieces=p,...}) = p
+
+fun fileName (SingleFile{name=n,...}) = Bytestring.toString n
+  | fileName (ManyFiles{name=n,...}) = Bytestring.toString n
+
+fun infoFiles (SingleFile{...}) = NONE
+  | infoFiles (ManyFiles{files,...}) = SOME files
+
+fun totalLength (info: t) : int =
+  case info of (ManyFiles _) => pieceLength info * pieceCount info
+             | (SingleFile{length=l,...}) => Word32.toInt l
+
+fun pieceEnd (info: t) (idx: int) =
+  if idx + 1  = pieceCount info
+  then (totalLength info) mod (pieceLength info)
+  else pieceLength info
+
+fun pieceIdx (info: t) (idx: int) (begin: int) : int = pieceLength info*idx + begin
+
+end
+
+
+structure Torrent = struct
+type info = MetaInfo.t
 type peer = { addr: NetHostDB.in_addr
             , port: int
             , pieces: w32 list
@@ -37,7 +124,7 @@ val PIECE_SIZE = 1024*16
 type t = { rawMeta : bencode
          , announceHost : URL.t
          , peers : peer list
-         , info : info
+         , info : MetaInfo.t
          , infoHash : bytestring
          , downloaded : Word8Array.array (* should be on disk or mmaped? *)
          , completed : bool Array.array
@@ -75,62 +162,6 @@ fun parseMetaInfoFile (filePath: string) : (string, bencode) either =
               ^"\nCurrent working directory was: "
               ^ Posix.FileSys.getcwd())
 
-
-(* info-related stuff needs its own module *)
-local
-  open Bencode
-  structure B = Bytestring
-  val o2e = Either.fromOption
-  fun split b = Vector.tabulate(B.size b div 20, fn i => B.substring(b, (i*20), 20))
-  fun k key dict = o2e ("parseInfo: Failed to find key: " ^ key)
-                       (atKey key dict)
-in
-fun parseInfo (dict: Bencode.t) : (string, info) either =
-  parseSingle dict >| Either.bindLeft (fn _ => parseMulti dict)
-and parseSingle d =
-  k"name"d
-  >>= (fn n => k"length"d
-  >>= (fn l => k"piece length"d
-  >>= (fn pl => k"pieces"d
-  >>= (fn pcs =>
-          case (n,l,pl,pcs)
-           of (String n, Integer l, Integer pl, String pcs) =>
-              INR \> SingleFile { name= Bytestring.fromString n
-                                , length=Word32.fromLargeInt l
-                                , pieceLength=Word32.fromLargeInt pl
-                                , pieces = split(Bytestring.fromString pcs)
-                                }
-            | _ => INL "Malformed info data"))))
-and parseMulti d =
-  k"name"d
-  >>= (fn n => Either.mapRight (parseFiles) (k"files"d)
-  >>= (fn files => k"piece length"d
-  >>= (fn pl => k"pieces"d
-  >>= (fn pcs =>
-          case (n,files,pl,pcs)
-           of (String n, SOME files, Integer pl, String pcs) =>
-              INR \> ManyFiles { name= Bytestring.fromString n
-                                , files=files
-                                , pieceLength=Word32.fromLargeInt pl
-                                , pieces = split(Bytestring.fromString pcs)
-                                }
-            | _ => INL "Malformed info data"))))
-and parseFiles (List(l)) =
-  let val vs = map (fn (d) => (k"length"d, k"path"d)) l
-      val good = List.mapPartial (fn (INR (Integer i), INR (List bs)) =>
-                                     SOME {length=Word32.fromLargeInt i
-                                          ,path=map (stringToBytes) bs}
-                                     | _ => NONE) vs
-  in if length good = length l then SOME good else NONE end
-  | parseFiles _ = NONE
-end
-
-fun getAnnounce (metaInfo: bencode) : (string, URL.t) either  =
-  case Bencode.atKey "announce" metaInfo
-   of (SOME (Bencode.String url)) => URL.fromString url
-                                     >| Either.fromOption("Couldn't parse announce: "^url)
-    | _=> INL "No 'announce' key present in .torrent";
-
 fun binToPeers (input: Bytestring.string) : (string, peer list) either =
   if Bytestring.size input mod 6 <> 0
   then INL "BAD INPUT LENGTH"
@@ -163,50 +194,30 @@ fun parsePeers (d: bencode) : (string, peer list) either  =
    of (SOME (Bencode.String b)) => binToPeers (Bytestring.fromString b)
     | _=> INL "No 'peers' key present";
 
+fun getAnnounce (metaInfo: bencode) : (string, URL.t) either  =
+  case Bencode.atKey "announce" metaInfo
+   of (SOME (Bencode.String url)) => URL.fromString url
+                                     >| Either.fromOption("Couldn't parse announce: "^url)
+    | _=> INL "No 'announce' key present in .torrent";
+
+(* move me to a method on Info struct *)
 fun getHash (metaInfo: bencode) : (string, Bytestring.string) either =
   (Bencode.atKey "info" metaInfo)
   >| Either.fromOption "No 'info' key present"
   >>= Bencode.encode
   >>= INR o SHA1.hashString
 
-fun pieceLength(SingleFile{pieceLength=l,...}) = Word32.toInt l
-  | pieceLength(ManyFiles{pieceLength=l,...}) = Word32.toInt l
-
-fun pieceCount(SingleFile{pieces=p,...}) = Vector.length p
-  | pieceCount(ManyFiles{pieces=p,...}) = Vector.length p
-
-fun pieceHashes(SingleFile{pieces=p,...}) = p
-  | pieceHashes(ManyFiles{pieces=p,...}) = p
-
-fun fileName(SingleFile{name=n,...}) = Bytestring.toString n
-  | fileName(ManyFiles{name=n,...}) = Bytestring.toString n
-
-fun infoFiles(SingleFile{...}) = NONE
-  | infoFiles(ManyFiles{files,...}) = SOME files
-
-fun totalLength (info: info) : int =
-  case info of (ManyFiles _) => pieceLength info * pieceCount info
-             | (SingleFile{length=l,...}) => Word32.toInt l
-
-fun pieceEnd (info: info) (idx: int) =
-  if idx + 1  = pieceCount info
-  then (totalLength info) mod (pieceLength info)
-  else pieceLength info
-
-fun hashPiece (t as {downloaded, info,...}:t) (idx : int) =
+fun hashPiece ({downloaded, info,...}:t) (idx : int) =
   Bytestring.substring(Word8Array.vector downloaded
-                      , idx*pieceLength info
-                      , pieceEnd info idx)
+                      , MetaInfo.pieceIdx info idx 0
+                      , MetaInfo.pieceEnd info idx)
   >| SHA1.hashBytes
 
-
-fun pieceIdx (info: info) (idx: int) (begin: int) : int = pieceLength info*idx + begin
-
-fun writeFile (t as ({info,downloaded,...}: t)) =
-    let val os = BinIO.openOut (fileName info)
+fun writeFile ({info,downloaded,...}: t) =
+    let val os = BinIO.openOut (MetaInfo.fileName info)
     in (BinIO.output(os,Word8Array.vector downloaded)
        ; BinIO.closeOut os
-       ; printLn \> "Wrote file " ^ fileName info
+       ; printLn \> "Wrote file " ^ (MetaInfo.fileName info)
        ; OS.Process.exit OS.Process.success
        )
        handle X => (BinIO.closeOut os; raise X)
@@ -218,15 +229,15 @@ fun openTorrent (filePath: string) : (string, t) either =
   >>= (fn h=> getAnnounce m
   >>= (fn url=> Either.fromOption "Couldn't find key: info in torrent metaInfo"
                                   (Bencode.atKey "info" m)
-  >>= (fn infoKey=> parseInfo infoKey
+  >>= (fn infoKey=> MetaInfo.parseInfo infoKey
   >>= (fn i=>
           INR {rawMeta = m
               ,announceHost = url
               ,peers = []
               ,info = i
               ,infoHash = h
-              ,downloaded = Word8Array.array(totalLength i,0w0)
-              ,completed = Array.array(totalLength i, false)
+              ,downloaded = Word8Array.array(MetaInfo.totalLength i,0w0)
+              ,completed = Array.array(MetaInfo.totalLength i, false)
       })))))
 
 fun getAddr ({hostname, port, ...} : URL.t) =
@@ -287,12 +298,15 @@ fun sendHandshake infoHash (peer as {socket=(SOME socket), state=PeerProtocol.Fr
 
 fun receiveHandshake infoHash (peer as {socket=(SOME socket), state=PeerProtocol.HandshakeSent,...}) : peer =
   let open PeerProtocol
-      val _ = printLn("receving handshake "^PolyML.makestring peer);
+      val _ = printLn("receiving handshake "^PolyML.makestring peer);
       val received = Socket.recvVec(socket, 68)
   in case parse received
-      of (INR(Handshake(hash,peerId))) => updatePeer peer
-                                                 (set#state HandshakeReceived)
-                                                 (set#peerId peerId) $
+      of (INR(Handshake(hash,peerId))) =>
+         if hash = infoHash
+         then updatePeer peer (set#state HandshakeReceived)
+                         (set#peerId peerId) $
+         else (printLn \> cc["Infohash Mismatch: expected:\n", Bytestring.toString infoHash,
+                             "but got:\n", Bytestring.toString hash]; peer)
        | other => (printLn \> "received other: "^PolyML.makestring other; peer)
   end
   | receiveHandshake _ peer : peer = (
@@ -322,7 +336,6 @@ fun recvOne ({socket=NONE,...}) : event option = NONE
       infix 1 >>=
       val op >>= = (fn (pre,post) => Option.mapPartial post pre)
       val op ^ = Bytestring.^
-      val join = Option.join
     in
       Socket.recvVecNB(socket, 4)
       >>= (fn lenB => ConvertWord.bytesToWord32B' lenB
@@ -338,7 +351,7 @@ fun mkRequests (peerId, indexes) =
 
 fun sendToPeer t     _ {socket=NONE,...} = t
   | sendToPeer t proto {socket=SOME socket,peerId,...} = let
-    val sent = Socket.sendVec(socket, v (PeerProtocol.serialize proto))
+    val _ = Socket.sendVec(socket, v (PeerProtocol.serialize proto))
     val _ = printLn("OUT: "^showEvent (peerId, proto))
   in t
   end
@@ -355,14 +368,14 @@ fun sendEvent (event as (peerId, proto), t) : t =
    of (SOME peer) => (sendToPeer t proto peer handle (OS.SysErr _) => removePeer t peerId)
     | NONE => (printLn ("Unknown peer" ^ showEvent event); t)
 
-fun checkCompletion (t as{info,downloaded,completed,...}:t) idx =
+fun checkCompletion (t as{info,completed,...}:t) idx =
   let val nComplete = Array.foldr (fn (x,s) => if x then s+1 else s) 0 completed
-      val allComplete = nComplete = pieceCount info
+      val allComplete = nComplete = MetaInfo.pieceCount info
       val _ = printLn\> "Downloaded piece: " ^ i2s idx
       val _ = printLn\> String.concat[ "Completed "
                                      , i2s nComplete
                                      , "/"
-                                     , i2s (pieceCount info)
+                                     , i2s (MetaInfo.pieceCount info)
                                      , " pieces"]
   in if allComplete
      then writeFile t
@@ -370,20 +383,21 @@ fun checkCompletion (t as{info,downloaded,completed,...}:t) idx =
   end
 
 fun handlePiece (t as {downloaded,info,completed,...}) outbox (peerId, PeerProtocol.Piece(idx,begin,data)) =
-  let val di = pieceIdx info idx begin
+  let val di = MetaInfo.pieceIdx info idx begin
       val _ = Word8Array.copyVec{src=data,dst=downloaded,di=di}
       val endPoint = begin+(Bytestring.size data)
-      val nextSize = Int.min(pieceEnd info idx - endPoint, PIECE_SIZE)
+      val nextSize = Int.min(MetaInfo.pieceEnd info idx - endPoint, PIECE_SIZE)
       val (outMsg, newHash) =
         if nextSize <> 0
         then ([(peerId, PeerProtocol.Request(idx, begin+PIECE_SIZE, nextSize))], NONE)
         else ([], SOME (hashPiece t idx))
-  in if newHash = SOME (Vector.sub(pieceHashes info,idx))
+  in if newHash = SOME (Vector.sub(MetaInfo.pieceHashes info,idx))
      then (Array.update(completed, idx, true)
           ; checkCompletion t idx
           ; (t, outbox)) (* TODO send out HAVE *)
      else (t, outMsg @ outbox)
   end
+  | handlePiece t outbox _ = (t, outbox)
 
 fun updateState ((peerId, proto) : event, (t: t, outbox: event list)) : (t * event list) = let
   open PeerProtocol
@@ -392,7 +406,7 @@ in case proto
      | Bitfield b => (t, [(peerId, Unchoke) , (peerId, Interested)]
                          @ (mkRequests (peerId, b))
                          @ outbox)
-     | Piece(idx, begin, data) => handlePiece t outbox (peerId, proto)
+     | Piece(_, _, _) => handlePiece t outbox (peerId, proto)
      | Choke => (t, outbox) (* TODO handle *)
      | Unchoke => (t, outbox) (* TODO handle *)
      | other => (printLn ("GOT OTHER"^PolyML.makestring other); (t, outbox))

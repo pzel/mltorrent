@@ -53,7 +53,7 @@ val _ = [
          let val op == = Assert.eq PolyML.makestring
              val (INR t) = T.openTorrent "./test/local.torrent"
              val expectedPiece = Word8Vector.fromList[0wxB4, 0wx39, 0wx43, 0wx88, 0wx42, 0wxEC, 0wxC4, 0wx95, 0wx87, 0wx52, 0wx2F, 0wx62, 0wx96, 0wx89, 0wx2F, 0wx10, 0wx46, 0wx67, 0wxA9, 0wx61]
-         in (#info t) == T.SingleFile {
+         in (#info t) == MetaInfo.SingleFile {
               name= bs "scratch.png"
              ,length=0w100506
              ,pieceLength=0w262144
@@ -63,7 +63,7 @@ val _ = [
 
  ,It "parses info for multi-file"
      (fn ()=> ((T.openTorrent "./test/sample.torrent" 
-               >| Either.mapRight (T.infoFiles o #info))
+               >| Either.mapRight (MetaInfo.infoFiles o #info))
                  === INR (SOME [{length=0w574823, path=[bs"sample_640x360.mp4"]}])) 
                 PolyML.makestring)
 
@@ -87,19 +87,20 @@ val _ = [
      (fn ()=>
          let val op == = Assert.eq PolyML.makestring
          in T.openTorrent "./test/local2.torrent"
-            >| Either.mapRight (T.pieceCount o #info)
+            >| Either.mapRight (MetaInfo.pieceCount o #info)
             == INR 2
          end)
 
  ,It "gets the correct piece hashes (concatenated pieces == original string in info)"
      (fn ()=>
          let val op == = Assert.eq PolyML.makestring
+             open MetaInfo
              fun force (INR s) = s | force (_) = raise (Fail "force");
              val t = T.openTorrent "./test/local2.torrent"
              val rawMeta = force \> Either.mapRight #rawMeta t
              val info = force \> Either.mapRight #info t
              val v2l = Vector.foldr op:: []
-             val parsed = Bytestring.concat(v2l(T.pieceHashes info))
+             val parsed = Bytestring.concat(v2l(pieceHashes info))
              val raw = Option.map Bencode.stringToBytes (Bencode.access ["info", "pieces"] rawMeta)
          in SOME parsed == raw
          end)
