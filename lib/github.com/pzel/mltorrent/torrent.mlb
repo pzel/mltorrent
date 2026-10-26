@@ -12,6 +12,7 @@ $(SMLPKG)/github.com/sjqtentacles/sml-parsec/parsec.mlb
 buildConfig.sml
 
 Timeout.sml
+TCP.sml
 BENCODE.sig
 Bencode.sml
 Url.sml

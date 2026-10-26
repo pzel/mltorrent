@@ -177,16 +177,12 @@ fun getPeers (t: t) : (string, t) either =
     | _ => getPeersHttp t
 
 fun connectToPeer (peer as {addr,port,...}: peer) : peer option =
-  (* socket will be NONE if unable to connect *)
-  let val s = INetSock.TCP.socket ()
-      val _ = printLn("Connecting to" ^ PolyML.makestring peer)
-      val p = (Timeout.connect (s, INetSock.toAddr(addr, port), Time.fromSeconds 1)
-              >>= (fn sock => INR (updatePeer peer (set#socket (SOME sock)) $)))
-  in case p of
-         (INR p) => SOME p
-       | (INL e) => (printLn \> "CONNECT ERROR: "^e^"\nDROPPING PEER "^PolyML.makestring peer
-                    ; NONE)
-  end
+  case TCP.connect addr port of
+      INR s => SOME (updatePeer peer (set#socket (SOME s)) $)
+    | INL e => (printLn \> cc["CONNECT ERROR: ",e
+                              ,"\nDROPPING PEER "
+                              ,PolyML.makestring peer]
+               ; NONE)
 
 fun sendHandshake infoHash (peer as {socket=(SOME socket), state=PeerProtocol.Fresh,...}) : peer =
   let open PeerProtocol
@@ -216,7 +212,6 @@ fun receiveHandshake infoHash (peer as {socket=(SOME socket), state=PeerProtocol
     printLn("Not receiving handshake "^PolyML.makestring peer)
   ; peer)
 
-(*  po 25 pazdziernika *)
 fun sendHandshakes (t as {peers,infoHash,...}: t) : (string, t) either =
   let val peers' = List.mapPartial connectToPeer peers >| map (sendHandshake infoHash)
   in INR \> updateT t (set#peers peers') $
@@ -242,7 +237,9 @@ fun recvOne ({socket=NONE,...}) : event option = NONE
     in
       Socket.recvVecNB(socket, 4)
       >>= (fn lenB => ConvertWord.bytesToWord32B' lenB
-      >>= (fn len => Socket.recvVecNB(socket, Word32.toInt len)
+      >>= (fn len => (if len > 0w0
+                      then Socket.recvVecNB(socket, Word32.toInt len)
+                      else NONE)
       >>= (fn payload =>
               case PeerProtocol.parse (lenB^payload)
                of INR proto => SOME (peerId, proto)
@@ -297,7 +294,7 @@ fun handlePiece (t as {downloaded,info,completed,...}) outbox (peerId, PeerProto
   in if newHash = SOME (Vector.sub(MetaInfo.pieceHashes info,idx))
      then (Array.update(completed, idx, true)
           ; checkCompletion t idx
-          ; (t, outbox)) (* TODO send out HAVE *)
+          ; (t, outbox)) (* TODO send out HAVE to interested peers*)
      else (t, outMsg @ outbox)
   end
   | handlePiece t outbox _ = (t, outbox)
